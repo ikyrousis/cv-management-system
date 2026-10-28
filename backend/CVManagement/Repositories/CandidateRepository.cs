@@ -12,10 +12,19 @@ internal sealed class CandidateRepository : ICandidateRepository
 
     public CandidateRepository(ApplicationDbContext context) => _context = context;
 
-    public async Task<IReadOnlyList<CandidateDto>> GetAllAsync(CancellationToken cancellationToken = default)
-        => await _context.Candidates
-            .Select(Projections.CandidateToDto)
-            .ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<CandidateDto>> GetAllAsync(int? page = null, int? pageSize = null, CancellationToken cancellationToken = default)
+    {
+        var query = _context.Candidates
+            .OrderBy(c => c.Id)
+            .Select(Projections.CandidateToDto);
+
+        query = Paging.Apply(query, page, pageSize);
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
+    public Task<int> CountAsync(CancellationToken cancellationToken = default)
+        => _context.Candidates.CountAsync(cancellationToken);
 
     public async Task<CandidateDto?> GetAsync(int id, CancellationToken cancellationToken = default)
         => await _context.Candidates

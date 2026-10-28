@@ -134,6 +134,45 @@ public sealed class CandidateDegreeLifecycleTests
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task Pagination_SlicesResultsAndReportsTotal()
+    {
+        if (SkipWithoutDocker())
+        {
+            return;
+        }
+
+        var client = _fixture.Factory!.CreateClient();
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var created = new List<int>();
+        for (var i = 1; i <= 3; i++)
+        {
+            var response = await client.PostAsJsonAsync("/api/degrees", new { name = $"Paged {suffix} {i}" });
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            var degree = await response.Content.ReadFromJsonAsync<DegreePayload>();
+            created.Add(degree!.Id);
+        }
+
+        var plain = await client.GetFromJsonAsync<List<DegreePayload>>("/api/degrees");
+        Assert.True(plain!.Count >= 3);
+
+        var paged = await client.GetAsync("/api/degrees?page=1&pageSize=2");
+        paged.EnsureSuccessStatusCode();
+        Assert.True(paged.Headers.TryGetValues("X-Total-Count", out var totals));
+        Assert.True(int.Parse(totals!.Single()) >= 3);
+        var items = await paged.Content.ReadFromJsonAsync<List<DegreePayload>>();
+        Assert.Equal(2, items!.Count);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/degrees?page=0")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/degrees?pageSize=101")).StatusCode);
+
+        foreach (var id in created)
+        {
+            Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/degrees/{id}")).StatusCode);
+        }
+    }
+
     private sealed record DegreePayload(int Id, string Name);
 
     private sealed record CandidatePayload(int Id, string FirstName, string LastName, string Email);

@@ -5,7 +5,7 @@ namespace CVManagement.Services;
 
 public interface ICandidateService
 {
-    Task<IReadOnlyList<CandidateDto>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<PagedResult<CandidateDto>> GetAllAsync(int? page = null, int? pageSize = null, CancellationToken cancellationToken = default);
 
     Task<Result<CandidateDto>> GetAsync(int id, CancellationToken cancellationToken = default);
 

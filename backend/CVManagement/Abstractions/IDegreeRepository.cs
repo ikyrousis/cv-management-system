@@ -5,7 +5,9 @@ namespace CVManagement.Abstractions;
 
 public interface IDegreeRepository
 {
-    Task<IReadOnlyList<DegreeDto>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DegreeDto>> GetAllAsync(int? page = null, int? pageSize = null, CancellationToken cancellationToken = default);
+
+    Task<int> CountAsync(CancellationToken cancellationToken = default);
 
     Task<DegreeDto?> GetAsync(int id, CancellationToken cancellationToken = default);
 

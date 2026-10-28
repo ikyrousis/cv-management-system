@@ -26,6 +26,19 @@ public sealed class CandidateServiceTests
     };
 
     [Fact]
+    public async Task GetAllAsync_PassesPagingThroughAndReportsTotal()
+    {
+        var items = new List<CandidateDto> { new() { Id = 1 } };
+        _candidates.GetAllAsync(3, 10, Arg.Any<CancellationToken>()).Returns(items);
+        _candidates.CountAsync(Arg.Any<CancellationToken>()).Returns(25);
+
+        var result = await CreateSut().GetAllAsync(3, 10);
+
+        Assert.Same(items, result.Items);
+        Assert.Equal(25, result.TotalCount);
+    }
+
+    [Fact]
     public async Task GetAsync_MissingCandidate_ReturnsNotFound()
     {
         _candidates.GetAsync(7).Returns((CandidateDto?)null);

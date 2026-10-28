@@ -137,6 +137,8 @@ the query projections.
 
 ## API Endpoints
 
+List endpoints accept optional `?page=&pageSize=` (pageSize defaults to 10 when paging, max 100; without params the full list is returned). The total count is always sent in the `X-Total-Count` response header.
+
 ### Candidates
 - `GET /api/candidates` - Get all candidates
 - `GET /api/candidates/{id}` - Get candidate by ID

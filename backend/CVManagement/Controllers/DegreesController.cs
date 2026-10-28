@@ -1,4 +1,5 @@
 using CVManagement.Extensions;
+using System.ComponentModel.DataAnnotations;
 using CVManagement.DTOs;
 using CVManagement.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -14,8 +15,17 @@ public sealed class DegreesController : ControllerBase
     public DegreesController(IDegreeService degrees) => _degrees = degrees;
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<DegreeDto>>> GetDegrees(CancellationToken cancellationToken)
-        => Ok(await _degrees.GetAllAsync(cancellationToken));
+    public async Task<ActionResult<IEnumerable<DegreeDto>>> GetDegrees(
+        [FromQuery][Range(1, int.MaxValue)] int? page,
+        [FromQuery][Range(1, 100)] int? pageSize,
+        CancellationToken cancellationToken)
+    {
+        var result = await _degrees.GetAllAsync(page, pageSize, cancellationToken);
+
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+
+        return Ok(result.Items);
+    }
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<DegreeDto>> GetDegree(int id, CancellationToken cancellationToken)

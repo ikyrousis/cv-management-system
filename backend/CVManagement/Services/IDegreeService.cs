@@ -5,7 +5,7 @@ namespace CVManagement.Services;
 
 public interface IDegreeService
 {
-    Task<IReadOnlyList<DegreeDto>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<PagedResult<DegreeDto>> GetAllAsync(int? page = null, int? pageSize = null, CancellationToken cancellationToken = default);
 
     Task<Result<DegreeDto>> GetAsync(int id, CancellationToken cancellationToken = default);
 

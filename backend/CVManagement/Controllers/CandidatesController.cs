@@ -1,4 +1,5 @@
 using CVManagement.Extensions;
+using System.ComponentModel.DataAnnotations;
 using CVManagement.DTOs;
 using CVManagement.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -14,8 +15,17 @@ public sealed class CandidatesController : ControllerBase
     public CandidatesController(ICandidateService candidates) => _candidates = candidates;
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<CandidateDto>>> GetCandidates(CancellationToken cancellationToken)
-        => Ok(await _candidates.GetAllAsync(cancellationToken));
+    public async Task<ActionResult<IEnumerable<CandidateDto>>> GetCandidates(
+        [FromQuery][Range(1, int.MaxValue)] int? page,
+        [FromQuery][Range(1, 100)] int? pageSize,
+        CancellationToken cancellationToken)
+    {
+        var result = await _candidates.GetAllAsync(page, pageSize, cancellationToken);
+
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+
+        return Ok(result.Items);
+    }
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<CandidateDto>> GetCandidate(int id, CancellationToken cancellationToken)

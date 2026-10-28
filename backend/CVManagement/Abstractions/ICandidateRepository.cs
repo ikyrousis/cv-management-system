@@ -6,7 +6,9 @@ namespace CVManagement.Abstractions;
 public interface ICandidateRepository
 {
     /// <summary>Projects straight into the read model; never materializes stored CV bytes.</summary>
-    Task<IReadOnlyList<CandidateDto>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CandidateDto>> GetAllAsync(int? page = null, int? pageSize = null, CancellationToken cancellationToken = default);
+
+    Task<int> CountAsync(CancellationToken cancellationToken = default);
 
     Task<CandidateDto?> GetAsync(int id, CancellationToken cancellationToken = default);
 

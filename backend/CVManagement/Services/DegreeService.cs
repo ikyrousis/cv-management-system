@@ -16,8 +16,13 @@ public sealed class DegreeService : IDegreeService
         _unitOfWork = unitOfWork;
     }
 
-    public Task<IReadOnlyList<DegreeDto>> GetAllAsync(CancellationToken cancellationToken = default)
-        => _degrees.GetAllAsync(cancellationToken);
+    public async Task<PagedResult<DegreeDto>> GetAllAsync(int? page = null, int? pageSize = null, CancellationToken cancellationToken = default)
+    {
+        var items = await _degrees.GetAllAsync(page, pageSize, cancellationToken);
+        var totalCount = await _degrees.CountAsync(cancellationToken);
+
+        return new PagedResult<DegreeDto> { Items = items, TotalCount = totalCount };
+    }
 
     public async Task<Result<DegreeDto>> GetAsync(int id, CancellationToken cancellationToken = default)
     {

@@ -25,8 +25,13 @@ public sealed class CandidateService : ICandidateService
         _unitOfWork = unitOfWork;
     }
 
-    public Task<IReadOnlyList<CandidateDto>> GetAllAsync(CancellationToken cancellationToken = default)
-        => _candidates.GetAllAsync(cancellationToken);
+    public async Task<PagedResult<CandidateDto>> GetAllAsync(int? page = null, int? pageSize = null, CancellationToken cancellationToken = default)
+    {
+        var items = await _candidates.GetAllAsync(page, pageSize, cancellationToken);
+        var totalCount = await _candidates.CountAsync(cancellationToken);
+
+        return new PagedResult<CandidateDto> { Items = items, TotalCount = totalCount };
+    }
 
     public async Task<Result<CandidateDto>> GetAsync(int id, CancellationToken cancellationToken = default)
     {

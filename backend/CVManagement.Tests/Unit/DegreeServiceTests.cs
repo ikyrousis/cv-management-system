@@ -114,6 +114,19 @@ public sealed class DegreeServiceTests
     }
 
     [Fact]
+    public async Task GetAllAsync_PassesPagingThroughAndReportsTotal()
+    {
+        var items = new List<DegreeDto> { new() { Id = 1, Name = "BSc" } };
+        _degrees.GetAllAsync(2, 5, Arg.Any<CancellationToken>()).Returns(items);
+        _degrees.CountAsync(Arg.Any<CancellationToken>()).Returns(12);
+
+        var result = await CreateSut().GetAllAsync(2, 5);
+
+        Assert.Same(items, result.Items);
+        Assert.Equal(12, result.TotalCount);
+    }
+
+    [Fact]
     public async Task GetAsync_MissingDegree_ReturnsNotFound()
     {
         _degrees.GetAsync(5).Returns((DegreeDto?)null);

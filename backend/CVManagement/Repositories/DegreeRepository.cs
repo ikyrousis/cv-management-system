@@ -12,10 +12,19 @@ internal sealed class DegreeRepository : IDegreeRepository
 
     public DegreeRepository(ApplicationDbContext context) => _context = context;
 
-    public async Task<IReadOnlyList<DegreeDto>> GetAllAsync(CancellationToken cancellationToken = default)
-        => await _context.Degrees
-            .Select(Projections.DegreeToDto)
-            .ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<DegreeDto>> GetAllAsync(int? page = null, int? pageSize = null, CancellationToken cancellationToken = default)
+    {
+        var query = _context.Degrees
+            .OrderBy(d => d.Id)
+            .Select(Projections.DegreeToDto);
+
+        query = Paging.Apply(query, page, pageSize);
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
+    public Task<int> CountAsync(CancellationToken cancellationToken = default)
+        => _context.Degrees.CountAsync(cancellationToken);
 
     public async Task<DegreeDto?> GetAsync(int id, CancellationToken cancellationToken = default)
         => await _context.Degrees
