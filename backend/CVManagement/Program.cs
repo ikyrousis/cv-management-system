@@ -1,5 +1,3 @@
-using CVManagement.Application.Abstractions;
-using CVManagement.Application.Services;
 using CVManagement.Infrastructure;
 using Microsoft.AspNetCore.Http.Features;
 
@@ -14,16 +12,19 @@ builder.Services.Configure<FormOptions>(options =>
     options.KeyLengthLimit = int.MaxValue;
 });
 
-builder.Services.AddInfrastructure("CVManagementDB");
+var connectionString = builder.Configuration.GetConnectionString("CVManagement")
+    ?? throw new InvalidOperationException("Connection string 'CVManagement' is not configured.");
 
-builder.Services.AddScoped<ICandidateService, CandidateService>();
-builder.Services.AddScoped<IDegreeService, DegreeService>();
+builder.Services.AddBackend(connectionString);
+
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? Array.Empty<string>();
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173")
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -35,7 +36,10 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-await app.Services.EnsureCreatedAsync();
+using (var scope = app.Services.CreateScope())
+{
+    await scope.ServiceProvider.GetRequiredService<IDatabaseInitialiser>().InitialiseAsync();
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -52,3 +56,5 @@ app.UseAuthorization();
 app.MapControllers();
 
 await app.RunAsync();
+
+public partial class Program;
