@@ -31,7 +31,7 @@ cp .env.example .env   # then change MSSQL_SA_PASSWORD
 docker compose up --build
 ```
 
-The API is served at http://localhost:5293 (Swagger is Development-only), SQL Server at localhost:1433.
+Serves the frontend at http://localhost:3000, the API at http://localhost:5293 (Swagger is Development-only), and SQL Server at localhost:1433.
 
 ### Backend on the host
 
@@ -50,12 +50,14 @@ dotnet test backend/CVManagement.Tests
 
 Unit tests always run. Integration tests spin up a SQL Server container via Testcontainers and skip themselves (logged as SKIPPED) when Docker is not running.
 
-### Frontend
+### Frontend on the host (development)
 
 1. Navigate to the `frontend` directory
 2. Run `npm install` to install dependencies
 3. Run `npm start` to start the development server
 4. Frontend will be available at `http://localhost:3000`
+
+With the database only: `docker compose up -d sql`.
 
 ## Technical Requirements Met
 
@@ -99,7 +101,7 @@ namespaces: the service tier owns the repository interfaces and the persistence 
 ```
 cv-management-system/
 ├── CVManagement.sln
-├── docker-compose.yml                   # SQL Server + API
+├── docker-compose.yml                   # SQL Server + API + frontend
 ├── .env.example                         # Template for MSSQL_SA_PASSWORD
 ├── .github/workflows/ci.yml             # Build + test backend, build frontend
 ├── backend/
@@ -122,7 +124,9 @@ cv-management-system/
 │   │   ├── components/                  # React Components
 │   │   ├── services/                    # API Service layer
 │   │   └── App.js                       # Main App component
-│   └── public/                          # Static files
+│   ├── public/                          # Static files
+│   ├── Dockerfile                       # Node build stage -> nginx serving the bundle
+│   └── nginx.conf                       # SPA fallback routing
 └── README.md
 ```
 
