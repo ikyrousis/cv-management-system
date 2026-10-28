@@ -1,7 +1,7 @@
-using CVManagement.Infrastructure.Persistence;
+
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-namespace CVManagement.Infrastructure;
+namespace CVManagement.Data;
 
 /// <summary>Healthy while the app can reach SQL Server.</summary>
 internal sealed class SqlHealthCheck : IHealthCheck

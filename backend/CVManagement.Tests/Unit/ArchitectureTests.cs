@@ -21,7 +21,10 @@ public sealed class ArchitectureTests
             foreach (var parameter in controller.GetConstructors().SelectMany(c => c.GetParameters()))
             {
                 Assert.False(
-                    parameter.ParameterType.Namespace?.StartsWith("CVManagement.Infrastructure") == true,
+                    parameter.ParameterType.Namespace is "CVManagement.Data" or "CVManagement.Repositories" or "CVManagement.Abstractions"
+                        || parameter.ParameterType.Namespace?.StartsWith("CVManagement.Data.") == true
+                        || parameter.ParameterType.Namespace?.StartsWith("CVManagement.Repositories.") == true
+                        || parameter.ParameterType.Namespace?.StartsWith("CVManagement.Abstractions.") == true,
                     $"{controller.Name} takes {parameter.ParameterType.FullName}, which is a persistence type.");
             }
         }

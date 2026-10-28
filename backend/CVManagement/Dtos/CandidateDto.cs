@@ -1,4 +1,4 @@
-namespace CVManagement.Dtos;
+namespace CVManagement.DTOs;
 
 /// <summary>Read model; server-owned values only, never accepted as input.</summary>
 public sealed class CandidateDto

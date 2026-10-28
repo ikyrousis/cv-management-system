@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using CVManagement.Validation;
 
-namespace CVManagement.Dtos;
+namespace CVManagement.DTOs;
 
 /// <summary>Write contract for candidate create/update; omits server-owned fields to block over-posting.</summary>
 public sealed class CandidateRequest

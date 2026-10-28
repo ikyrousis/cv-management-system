@@ -1,4 +1,4 @@
-namespace CVManagement.Dtos;
+namespace CVManagement.DTOs;
 
 /// <summary>Uploaded CV content; keeps transport types out of the service layer.</summary>
 public sealed record CvUpload(byte[] Content, string FileName, string ContentType);

@@ -1,7 +1,7 @@
-using CVManagement.Infrastructure.Persistence;
+
 using Microsoft.Data.SqlClient;
 
-namespace CVManagement.Infrastructure;
+namespace CVManagement.Data;
 
 internal interface IDatabaseInitialiser
 {

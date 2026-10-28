@@ -1,9 +1,10 @@
 using CVManagement.Abstractions;
-using CVManagement.Dtos;
+using CVManagement.Data;
+using CVManagement.DTOs;
 using CVManagement.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace CVManagement.Infrastructure.Persistence;
+namespace CVManagement.Repositories;
 
 internal sealed class CandidateRepository : ICandidateRepository
 {

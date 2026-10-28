@@ -1,6 +1,7 @@
 using CVManagement.Abstractions;
+using CVManagement.Data;
 
-namespace CVManagement.Infrastructure.Persistence;
+namespace CVManagement.Repositories;
 
 internal sealed class UnitOfWork : IUnitOfWork
 {

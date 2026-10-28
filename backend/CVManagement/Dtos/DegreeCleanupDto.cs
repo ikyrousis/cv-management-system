@@ -1,4 +1,4 @@
-namespace CVManagement.Dtos;
+namespace CVManagement.DTOs;
 
 public sealed class DegreeCleanupDto
 {

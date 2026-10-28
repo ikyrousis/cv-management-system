@@ -1,7 +1,7 @@
 using CVManagement.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace CVManagement.Infrastructure.Persistence;
+namespace CVManagement.Data;
 
 internal class ApplicationDbContext : DbContext
 {

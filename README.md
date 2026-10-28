@@ -90,31 +90,32 @@ With the database only: `docker compose up -d sql`.
 ## Project Structure
 
 The backend is a single project with three internal tiers. Dependencies point inward through
-namespaces: the service tier owns the repository interfaces and the persistence tier implements them.
+namespaces: controllers and services never touch `Data/` or `Repositories/` implementations
+beyond their interfaces, and an architecture test enforces that for controllers.
 
 | Folder | Tier | Responsibility |
 | --- | --- | --- |
 | `Controllers/`, `Extensions/`, `Program.cs` | Web | Thin controllers, HTTP routing, binding request DTOs, rendering service results as status codes, composition root |
-| `Abstractions/`, `Dtos/`, `Entities/`, `Results/`, `Services/`, `Validation/` | Service | Business rules, entities, DTOs, repository and unit-of-work interfaces |
-| `Infrastructure/` | Repository | EF Core context, query projections, repository implementations, database initialiser, health check |
+| `DTOs/`, `Entities/`, `Results/`, `Services/`, `Validation/`, `Abstractions/` | Service | Business rules, entities, DTOs, service implementations, and the persistence interfaces they depend on |
+| `Data/`, `Repositories/` | Persistence | EF Core context, repository implementations, unit of work, database initialiser, health check |
 
 ```
 cv-management-system/
-├── CVManagement.sln
 ├── docker-compose.yml                   # SQL Server + API + frontend
 ├── .env.example                         # Template for MSSQL_SA_PASSWORD
 ├── .github/workflows/ci.yml             # Build + test backend, build frontend
 ├── backend/
+│   ├── CVManagement.sln                 # Solution, at the backend root
 │   ├── CVManagement/                    # Single backend project
-│   │   ├── Abstractions/                # ICandidateRepository, IDegreeRepository, IUnitOfWork
+│   │   ├── Abstractions/                # Repository and unit-of-work interfaces, owned by the service side
 │   │   ├── Controllers/                 # Thin controllers, no EF and no business rules
-│   │   ├── Dtos/                        # Request contracts and response read models
+│   │   ├── DTOs/                        # Request contracts and response read models
+│   │   ├── Data/                        # ApplicationDbContext, initialiser, health check
 │   │   ├── Entities/                    # Persistence-agnostic entities
 │   │   ├── Extensions/                  # Service result -> IActionResult mapping
-│   │   ├── Infrastructure/
-│   │   │   └── Persistence/             # ApplicationDbContext, projections, repositories
+│   │   ├── Repositories/                # EF repository implementations, unit of work, projections
 │   │   ├── Results/                     # Result / Result<T> and failure kinds
-│   │   ├── Services/                    # CandidateService, DegreeService
+│   │   ├── Services/                    # Service interfaces + implementations
 │   │   ├── Validation/                  # Shared input patterns
 │   │   ├── Dockerfile
 │   │   └── Program.cs                   # Composition root

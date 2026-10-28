@@ -1,5 +1,5 @@
 using CVManagement.Extensions;
-using CVManagement.Dtos;
+using CVManagement.DTOs;
 using CVManagement.Services;
 using Microsoft.AspNetCore.Mvc;
 

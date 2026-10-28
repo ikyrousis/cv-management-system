@@ -1,4 +1,4 @@
-using CVManagement.Dtos;
+using CVManagement.DTOs;
 using CVManagement.Entities;
 
 namespace CVManagement.Abstractions;

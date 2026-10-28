@@ -1,5 +1,5 @@
 using CVManagement.Abstractions;
-using CVManagement.Dtos;
+using CVManagement.DTOs;
 using CVManagement.Entities;
 using CVManagement.Results;
 using CVManagement.Services;

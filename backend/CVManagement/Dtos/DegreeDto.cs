@@ -1,4 +1,4 @@
-namespace CVManagement.Dtos;
+namespace CVManagement.DTOs;
 
 /// <summary>Read model returned to callers.</summary>
 public sealed class DegreeDto

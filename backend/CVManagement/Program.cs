@@ -1,5 +1,9 @@
-using CVManagement.Infrastructure;
+using CVManagement.Abstractions;
+using CVManagement.Data;
+using CVManagement.Repositories;
+using CVManagement.Services;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.EntityFrameworkCore;
 
 const long CvUploadMaxBytes = 20 * 1024 * 1024;
 
@@ -24,7 +28,16 @@ var connectionString = builder.Configuration.GetConnectionString("CVManagement")
         "'dotnet user-secrets set ConnectionStrings:CVManagement <value>' (Development) " +
         "or the ConnectionStrings__CVManagement environment variable.");
 
-builder.Services.AddBackend(connectionString);
+builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(connectionString));
+
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<ICandidateRepository, CandidateRepository>();
+builder.Services.AddScoped<IDegreeRepository, DegreeRepository>();
+
+builder.Services.AddScoped<ICandidateService, CandidateService>();
+builder.Services.AddScoped<IDegreeService, DegreeService>();
+
+builder.Services.AddScoped<IDatabaseInitialiser, DatabaseInitialiser>();
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? Array.Empty<string>();

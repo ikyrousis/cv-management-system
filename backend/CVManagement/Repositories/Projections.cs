@@ -1,8 +1,8 @@
 using System.Linq.Expressions;
-using CVManagement.Dtos;
+using CVManagement.DTOs;
 using CVManagement.Entities;
 
-namespace CVManagement.Infrastructure.Persistence;
+namespace CVManagement.Repositories;
 
 /// <summary>Single definition of entity-to-read-model mapping, used by both read and re-read paths.</summary>
 internal static class Projections
