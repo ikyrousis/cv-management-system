@@ -1,0 +1,45 @@
+using CVManagement.Api.Extensions;
+using CVManagement.Application.Dtos;
+using CVManagement.Application.Services;
+using Microsoft.AspNetCore.Mvc;
+
+namespace CVManagement.Api.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public sealed class DegreesController : ControllerBase
+{
+    private readonly IDegreeService _degrees;
+
+    public DegreesController(IDegreeService degrees) => _degrees = degrees;
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<DegreeDto>>> GetDegrees(CancellationToken cancellationToken)
+        => Ok(await _degrees.GetAllAsync(cancellationToken));
+
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<DegreeDto>> GetDegree(int id, CancellationToken cancellationToken)
+        => this.AsResult(await _degrees.GetAsync(id, cancellationToken));
+
+    [HttpPost]
+    public async Task<ActionResult<DegreeDto>> CreateDegree(DegreeRequest request, CancellationToken cancellationToken)
+        => this.AsResult(
+            await _degrees.CreateAsync(request, cancellationToken),
+            created => CreatedAtAction(nameof(GetDegree), new { id = created.Id }, created));
+
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> UpdateDegree(int id, DegreeRequest request, CancellationToken cancellationToken)
+        => this.AsNoContent(await _degrees.UpdateAsync(id, request, cancellationToken));
+
+    /// <summary>
+    /// The literal segment keeps this route distinct from <c>{id:int}</c> without relying on
+    /// route-precedence rules.
+    /// </summary>
+    [HttpDelete("cleanup")]
+    public async Task<ActionResult<DegreeCleanupDto>> CleanupUnusedDegrees(CancellationToken cancellationToken)
+        => Ok(await _degrees.CleanupUnassignedAsync(cancellationToken));
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> DeleteDegree(int id, CancellationToken cancellationToken)
+        => this.AsNoContent(await _degrees.DeleteAsync(id, cancellationToken));
+}

@@ -1,11 +1,11 @@
 # Build outputs
-CVManagementAPI/bin/
-CVManagementAPI/obj/
-cv-management-frontend/build/
-cv-management-frontend/dist/
+bin/
+obj/
+frontend/build/
+frontend/dist/
 
 # Dependencies
-cv-management-frontend/node_modules/
+frontend/node_modules/
 
 # IDE files
 .vs/

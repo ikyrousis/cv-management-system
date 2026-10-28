@@ -1,0 +1,45 @@
+using CVManagement.Application.Abstractions;
+using CVManagement.Application.Dtos;
+using CVManagement.Application.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace CVManagement.Infrastructure.Persistence;
+
+public sealed class CandidateRepository : ICandidateRepository
+{
+    private readonly ApplicationDbContext _context;
+
+    public CandidateRepository(ApplicationDbContext context) => _context = context;
+
+    public async Task<IReadOnlyList<CandidateDto>> GetAllAsync(CancellationToken cancellationToken = default)
+        => await _context.Candidates
+            .Select(Projections.CandidateToDto)
+            .ToListAsync(cancellationToken);
+
+    public async Task<CandidateDto?> GetAsync(int id, CancellationToken cancellationToken = default)
+        => await _context.Candidates
+            .Where(c => c.Id == id)
+            .Select(Projections.CandidateToDto)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<Candidate?> FindAsync(int id, CancellationToken cancellationToken = default)
+        => _context.Candidates.FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+
+    public async Task<CvFileDto?> GetCvAsync(int id, CancellationToken cancellationToken = default)
+        => await _context.Candidates
+            .Where(c => c.Id == id && c.CVFile != null)
+            .Select(c => new CvFileDto
+            {
+                Content = c.CVFile!,
+                FileName = c.CVFileName,
+                ContentType = c.CVContentType
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<bool> ExistsAsync(int id, CancellationToken cancellationToken = default)
+        => _context.Candidates.AnyAsync(c => c.Id == id, cancellationToken);
+
+    public void Add(Candidate candidate) => _context.Candidates.Add(candidate);
+
+    public void Remove(Candidate candidate) => _context.Candidates.Remove(candidate);
+}
