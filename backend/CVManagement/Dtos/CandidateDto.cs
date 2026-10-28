@@ -1,8 +1,6 @@
-namespace CVManagement.Application.Dtos;
+namespace CVManagement.Dtos;
 
-/// <summary>
-/// Read model returned to callers. Server-owned values only; nothing here is accepted as input.
-/// </summary>
+/// <summary>Read model; server-owned values only, never accepted as input.</summary>
 public sealed class CandidateDto
 {
     public int Id { get; set; }

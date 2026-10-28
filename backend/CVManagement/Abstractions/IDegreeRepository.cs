@@ -1,7 +1,7 @@
-using CVManagement.Application.Dtos;
-using CVManagement.Application.Entities;
+using CVManagement.Dtos;
+using CVManagement.Entities;
 
-namespace CVManagement.Application.Abstractions;
+namespace CVManagement.Abstractions;
 
 public interface IDegreeRepository
 {
@@ -9,16 +9,12 @@ public interface IDegreeRepository
 
     Task<DegreeDto?> GetAsync(int id, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Loads the tracked entity for mutation. Callers must commit through <see cref="IUnitOfWork"/>.
-    /// </summary>
+    /// <summary>Loads the tracked entity for mutation; commit through <see cref="IUnitOfWork"/>.</summary>
     Task<Degree?> FindAsync(int id, CancellationToken cancellationToken = default);
 
     Task<bool> ExistsAsync(int id, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Case-insensitive name lookup, optionally excluding one degree so an update can keep its own name.
-    /// </summary>
+    /// <summary>Case-insensitive name lookup, optionally excluding one degree.</summary>
     Task<bool> NameTakenAsync(string name, int? excludeId = null, CancellationToken cancellationToken = default);
 
     Task<bool> IsAssignedToCandidatesAsync(int id, CancellationToken cancellationToken = default);

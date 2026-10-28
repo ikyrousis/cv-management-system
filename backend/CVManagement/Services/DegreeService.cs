@@ -1,9 +1,9 @@
-using CVManagement.Application.Abstractions;
-using CVManagement.Application.Dtos;
-using CVManagement.Application.Entities;
-using CVManagement.Application.Results;
+using CVManagement.Abstractions;
+using CVManagement.Dtos;
+using CVManagement.Entities;
+using CVManagement.Results;
 
-namespace CVManagement.Application.Services;
+namespace CVManagement.Services;
 
 public sealed class DegreeService : IDegreeService
 {

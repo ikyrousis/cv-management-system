@@ -1,11 +1,11 @@
-using CVManagement.Application.Abstractions;
-using CVManagement.Application.Dtos;
-using CVManagement.Application.Entities;
+using CVManagement.Abstractions;
+using CVManagement.Dtos;
+using CVManagement.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace CVManagement.Infrastructure.Persistence;
 
-public sealed class CandidateRepository : ICandidateRepository
+internal sealed class CandidateRepository : ICandidateRepository
 {
     private readonly ApplicationDbContext _context;
 

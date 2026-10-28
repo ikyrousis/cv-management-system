@@ -3,7 +3,7 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in a .env file next to docker-compose.yml}
     ports:
       - "1433:1433"
     volumes:
@@ -13,6 +13,18 @@ services:
       interval: 10s
       retries: 10
       start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/CVManagement/Dockerfile
+    environment:
+      ConnectionStrings__CVManagement: "Server=sql;Database=CVManagementDB;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
+    ports:
+      - "5293:8080"
+    depends_on:
+      sql:
+        condition: service_healthy
 
 volumes:
   sqldata:

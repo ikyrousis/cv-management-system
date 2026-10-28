@@ -1,8 +1,8 @@
-using CVManagement.Application.Abstractions;
+using CVManagement.Abstractions;
 
 namespace CVManagement.Infrastructure.Persistence;
 
-public sealed class UnitOfWork : IUnitOfWork
+internal sealed class UnitOfWork : IUnitOfWork
 {
     private readonly ApplicationDbContext _context;
 

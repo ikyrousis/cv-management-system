@@ -1,7 +1,7 @@
-using CVManagement.Application.Dtos;
-using CVManagement.Application.Results;
+using CVManagement.Dtos;
+using CVManagement.Results;
 
-namespace CVManagement.Application.Services;
+namespace CVManagement.Services;
 
 public interface ICandidateService
 {

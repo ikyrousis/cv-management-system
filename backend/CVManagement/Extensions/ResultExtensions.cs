@@ -1,11 +1,9 @@
-using CVManagement.Application.Results;
+using CVManagement.Results;
 using Microsoft.AspNetCore.Mvc;
 
-namespace CVManagement.Api.Extensions;
+namespace CVManagement.Extensions;
 
-/// <summary>
-/// Renders a service outcome as an HTTP result, so controllers never branch on failure kinds.
-/// </summary>
+/// <summary>Renders a service outcome as an HTTP result, so controllers never branch on failure kinds.</summary>
 public static class ResultExtensions
 {
     public static IActionResult AsNoContent(this ControllerBase controller, Result result)

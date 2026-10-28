@@ -1,8 +1,6 @@
-namespace CVManagement.Application.Dtos;
+namespace CVManagement.Dtos;
 
-/// <summary>
-/// Read model returned to callers.
-/// </summary>
+/// <summary>Read model returned to callers.</summary>
 public sealed class DegreeDto
 {
     public int Id { get; set; }

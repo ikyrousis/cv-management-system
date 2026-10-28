@@ -1,13 +1,10 @@
 using System.Linq.Expressions;
-using CVManagement.Application.Dtos;
-using CVManagement.Application.Entities;
+using CVManagement.Dtos;
+using CVManagement.Entities;
 
 namespace CVManagement.Infrastructure.Persistence;
 
-/// <summary>
-/// The only definition of the entity-to-read-model mapping. Read paths project with it, and write
-/// paths re-read through it, so a field cannot be mapped one way in one place and another way elsewhere.
-/// </summary>
+/// <summary>Single definition of entity-to-read-model mapping, used by both read and re-read paths.</summary>
 internal static class Projections
 {
     public static readonly Expression<Func<Candidate, CandidateDto>> CandidateToDto = c => new CandidateDto

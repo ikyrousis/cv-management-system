@@ -1,9 +1,9 @@
-using CVManagement.Api.Extensions;
-using CVManagement.Application.Dtos;
-using CVManagement.Application.Services;
+using CVManagement.Extensions;
+using CVManagement.Dtos;
+using CVManagement.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace CVManagement.Api.Controllers;
+namespace CVManagement.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]

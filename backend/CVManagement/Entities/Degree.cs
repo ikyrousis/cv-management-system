@@ -1,4 +1,4 @@
-namespace CVManagement.Application.Entities;
+namespace CVManagement.Entities;
 
 public class Degree
 {
@@ -6,7 +6,7 @@ public class Degree
 
     public string Name { get; set; } = string.Empty;
 
-    public DateTime CreationTime { get; set; } = DateTime.Now;
+    public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 
     public ICollection<Candidate> Candidates { get; set; } = new List<Candidate>();
 }

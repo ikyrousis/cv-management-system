@@ -1,4 +1,4 @@
-namespace CVManagement.Application.Results;
+namespace CVManagement.Results;
 
 public enum FailureKind
 {

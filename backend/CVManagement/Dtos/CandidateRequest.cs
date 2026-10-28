@@ -1,12 +1,9 @@
 using System.ComponentModel.DataAnnotations;
-using CVManagement.Application.Validation;
+using CVManagement.Validation;
 
-namespace CVManagement.Application.Dtos;
+namespace CVManagement.Dtos;
 
-/// <summary>
-/// Write contract for creating and updating a candidate. The identity comes from the route on
-/// update, and every server-owned field is absent, so nothing here can be over-posted.
-/// </summary>
+/// <summary>Write contract for candidate create/update; omits server-owned fields to block over-posting.</summary>
 public sealed class CandidateRequest
 {
     [Required(ErrorMessage = "Last name is required")]

@@ -1,17 +1,14 @@
-using CVManagement.Application.Abstractions;
-using CVManagement.Application.Services;
+using CVManagement.Abstractions;
+using CVManagement.Services;
 using CVManagement.Infrastructure;
 using CVManagement.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace CVManagement.Infrastructure;
 
-public static class DependencyInjection
+internal static class DependencyInjection
 {
-    /// <summary>
-    /// Single composition root for the backend: persistence, the application services that use it,
-    /// and the startup initialiser.
-    /// </summary>
+    /// <summary>Single composition root: persistence, application services, startup initialiser.</summary>
     public static IServiceCollection AddBackend(this IServiceCollection services, string connectionString)
     {
         services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(connectionString));

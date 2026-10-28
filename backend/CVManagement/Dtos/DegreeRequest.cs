@@ -1,10 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace CVManagement.Application.Dtos;
+namespace CVManagement.Dtos;
 
-/// <summary>
-/// Write contract for creating and updating a degree.
-/// </summary>
+/// <summary>Write contract for creating and updating a degree.</summary>
 public sealed class DegreeRequest
 {
     [Required(ErrorMessage = "Name is required")]

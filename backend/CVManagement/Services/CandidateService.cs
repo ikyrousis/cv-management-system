@@ -1,9 +1,9 @@
-using CVManagement.Application.Abstractions;
-using CVManagement.Application.Dtos;
-using CVManagement.Application.Entities;
-using CVManagement.Application.Results;
+using CVManagement.Abstractions;
+using CVManagement.Dtos;
+using CVManagement.Entities;
+using CVManagement.Results;
 
-namespace CVManagement.Application.Services;
+namespace CVManagement.Services;
 
 public sealed class CandidateService : ICandidateService
 {
@@ -174,11 +174,7 @@ public sealed class CandidateService : ICandidateService
             : ServiceFailure.Validation("Invalid degree ID");
     }
 
-    /// <summary>
-    /// Optional text fields arrive as an empty string from HTML forms, and a pattern attribute
-    /// deliberately does not test an empty value. Collapsing blank input to null keeps "not
-    /// supplied" distinct from "supplied and wrong".
-    /// </summary>
+    /// <summary>Collapses blank form input to null, keeping "not supplied" distinct from "supplied and wrong".</summary>
     private static string? NormalizeMobile(string? mobile)
         => string.IsNullOrWhiteSpace(mobile) ? null : mobile.Trim();
 }

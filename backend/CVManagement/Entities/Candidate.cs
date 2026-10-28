@@ -1,4 +1,4 @@
-namespace CVManagement.Application.Entities;
+namespace CVManagement.Entities;
 
 public class Candidate
 {
@@ -20,7 +20,7 @@ public class Candidate
 
     public string? CVContentType { get; set; }
 
-    public DateTime CreationTime { get; set; } = DateTime.Now;
+    public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 
     public Degree? Degree { get; set; }
 

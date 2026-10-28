@@ -1,3 +1,3 @@
-namespace CVManagement.Application.Dtos;
+namespace CVManagement.Dtos;
 
 public sealed record MessageDto(string Message);

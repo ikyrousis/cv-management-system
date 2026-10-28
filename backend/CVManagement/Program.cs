@@ -1,19 +1,28 @@
 using CVManagement.Infrastructure;
 using Microsoft.AspNetCore.Http.Features;
 
+const long CvUploadMaxBytes = 20 * 1024 * 1024;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = long.MaxValue;
+    // Cap uploads so one request cannot exhaust memory.
+    options.MultipartBodyLengthLimit = CvUploadMaxBytes;
     options.ValueLengthLimit = int.MaxValue;
     options.KeyLengthLimit = int.MaxValue;
 });
 
+builder.Services.AddHealthChecks()
+    .AddCheck<SqlHealthCheck>("sqlserver");
+
 var connectionString = builder.Configuration.GetConnectionString("CVManagement")
-    ?? throw new InvalidOperationException("Connection string 'CVManagement' is not configured.");
+    ?? throw new InvalidOperationException(
+        "Connection string 'CVManagement' is not configured. Set it with " +
+        "'dotnet user-secrets set ConnectionStrings:CVManagement <value>' (Development) " +
+        "or the ConnectionStrings__CVManagement environment variable.");
 
 builder.Services.AddBackend(connectionString);
 
@@ -54,6 +63,8 @@ app.UseCors("AllowReactApp");
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapHealthChecks("/health");
 
 await app.RunAsync();
 

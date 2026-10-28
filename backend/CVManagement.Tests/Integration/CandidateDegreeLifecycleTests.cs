@@ -1,98 +1,22 @@
-using System.IO.Pipes;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
-using Testcontainers.MsSql;
 using Xunit;
 
 namespace CVManagement.Tests.Integration;
 
-/// <summary>
-/// Boots the real API pipeline against a disposable SQL Server container.
-/// Every test class sharing this fixture reuses one container.
-/// </summary>
-public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
+[Collection(SqlApiCollection.Name)]
+public sealed class CandidateDegreeLifecycleTests
 {
-    /// <summary>
-    /// Built lazily because <see cref="MsSqlBuilder.Build"/> itself throws when Docker is unreachable,
-    /// and the skip path must stay usable without Docker.
-    /// </summary>
-    private MsSqlContainer? _sql;
-
-    public static bool DockerAvailable { get; } = ProbeDocker();
-
-    public async Task InitializeAsync()
-    {
-        if (!DockerAvailable)
-        {
-            return;
-        }
-
-        _sql = new MsSqlBuilder()
-            .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
-            .Build();
-
-        await _sql.StartAsync();
-    }
-
-    public new async Task DisposeAsync()
-    {
-        if (_sql is not null)
-        {
-            await _sql.DisposeAsync();
-        }
-    }
-
-    protected override void ConfigureWebHost(IWebHostBuilder builder)
-    {
-        if (_sql is null)
-        {
-            return;
-        }
-
-        builder.ConfigureAppConfiguration(config =>
-        {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:CVManagement"] = _sql.GetConnectionString()
-            });
-        });
-    }
-
-    private static bool ProbeDocker()
-    {
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOCKER_HOST")))
-        {
-            return true;
-        }
-
-        try
-        {
-            using var pipe = new NamedPipeClientStream(".", "docker_engine", PipeDirection.Out);
-            pipe.Connect(TimeSpan.FromSeconds(2).Milliseconds);
-            return true;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
-}
-
-public sealed class CandidateDegreeLifecycleTests : IClassFixture<ApiFactory>
-{
-    private readonly ApiFactory _factory;
+    private readonly SqlApiFixture _fixture;
     private readonly ITestOutputHelper _output;
 
-    public CandidateDegreeLifecycleTests(ApiFactory factory, ITestOutputHelper output)
+    public CandidateDegreeLifecycleTests(SqlApiFixture fixture, ITestOutputHelper output)
     {
-        _factory = factory;
+        _fixture = fixture;
         _output = output;
     }
 
     private bool SkipWithoutDocker()
     {
-        if (!ApiFactory.DockerAvailable)
+        if (!SqlApiFixture.DockerAvailable || _fixture.Factory is null)
         {
             _output.WriteLine("SKIPPED: Docker is not running; start Docker Desktop to execute integration tests.");
             return true;
@@ -109,7 +33,7 @@ public sealed class CandidateDegreeLifecycleTests : IClassFixture<ApiFactory>
             return;
         }
 
-        var client = _factory.CreateClient();
+        var client = _fixture.Factory!.CreateClient();
 
         var degreeResponse = await client.PostAsJsonAsync("/api/degrees", new { name = "BSc Integration" });
         degreeResponse.EnsureSuccessStatusCode();
@@ -149,7 +73,7 @@ public sealed class CandidateDegreeLifecycleTests : IClassFixture<ApiFactory>
             return;
         }
 
-        var client = _factory.CreateClient();
+        var client = _fixture.Factory!.CreateClient();
 
         var candidateResponse = await client.PostAsJsonAsync("/api/candidates", new
         {
@@ -165,7 +89,7 @@ public sealed class CandidateDegreeLifecycleTests : IClassFixture<ApiFactory>
             {
                 new ByteArrayContent(new byte[] { 1, 2, 3 })
                 {
-                    Headers = { ContentType = new("application/pdf") }
+                    Headers = { ContentType = new MediaTypeHeaderValue("application/pdf") }
                 },
                 "file",
                 "cv.pdf"
@@ -179,12 +103,12 @@ public sealed class CandidateDegreeLifecycleTests : IClassFixture<ApiFactory>
         Assert.Equal("application/pdf", download.Content.Headers.ContentType?.MediaType);
         Assert.Equal(new byte[] { 1, 2, 3 }, await download.Content.ReadAsByteArrayAsync());
 
-        var rejected = new MultipartFormDataContent
+        using var rejected = new MultipartFormDataContent
         {
             {
                 new ByteArrayContent(new byte[] { 9 })
                 {
-                    Headers = { ContentType = new("application/octet-stream") }
+                    Headers = { ContentType = new MediaTypeHeaderValue("application/octet-stream") }
                 },
                 "file",
                 "bad.exe"
@@ -192,6 +116,22 @@ public sealed class CandidateDegreeLifecycleTests : IClassFixture<ApiFactory>
         };
         var rejectedUpload = await client.PostAsync($"/api/candidates/{candidate.Id}/cv", rejected);
         Assert.Equal(HttpStatusCode.BadRequest, rejectedUpload.StatusCode);
+    }
+
+    [Fact]
+    public async Task HealthEndpoint_ReportsHealthy()
+    {
+        if (SkipWithoutDocker())
+        {
+            return;
+        }
+
+        var client = _fixture.Factory!.CreateClient();
+
+        var response = await client.GetAsync("/health");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
     }
 
     private sealed record DegreePayload(int Id, string Name);

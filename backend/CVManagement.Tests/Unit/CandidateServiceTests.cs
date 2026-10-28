@@ -1,8 +1,8 @@
-using CVManagement.Application.Abstractions;
-using CVManagement.Application.Dtos;
-using CVManagement.Application.Entities;
-using CVManagement.Application.Results;
-using CVManagement.Application.Services;
+using CVManagement.Abstractions;
+using CVManagement.Dtos;
+using CVManagement.Entities;
+using CVManagement.Results;
+using CVManagement.Services;
 using NSubstitute;
 using Xunit;
 
