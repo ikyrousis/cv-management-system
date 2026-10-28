@@ -9,9 +9,6 @@ public static class ResultExtensions
     public static IActionResult AsNoContent(this ControllerBase controller, Result result)
         => result.IsSuccess ? controller.NoContent() : controller.AsError(result.Failure);
 
-    public static IActionResult AsOk(this ControllerBase controller, Result result)
-        => result.IsSuccess ? controller.Ok() : controller.AsError(result.Failure);
-
     public static ActionResult<T> AsResult<T>(this ControllerBase controller, Result<T> result)
         => result.IsSuccess ? controller.Ok(result.Value) : controller.AsError<T>(result.Failure);
 

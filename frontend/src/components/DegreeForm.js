@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { degreesAPI } from 'services/api';
 
@@ -14,13 +14,7 @@ function DegreeForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    if (isEdit) {
-      fetchDegree();
-    }
-  }, [id, isEdit]);
-
-  const fetchDegree = async () => {
+  const fetchDegree = useCallback(async () => {
     try {
       const response = await degreesAPI.getById(id);
       const degree = response.data;
@@ -31,7 +25,13 @@ function DegreeForm() {
       setError('Failed to fetch degree');
       console.error('Error fetching degree:', err);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    if (isEdit) {
+      fetchDegree();
+    }
+  }, [isEdit, fetchDegree]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;

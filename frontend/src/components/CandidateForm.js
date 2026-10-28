@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { candidatesAPI, degreesAPI } from 'services/api';
 
@@ -20,14 +20,7 @@ function CandidateForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    fetchDegrees();
-    if (isEdit) {
-      fetchCandidate();
-    }
-  }, [id, isEdit]);
-
-  const fetchDegrees = async () => {
+  const fetchDegrees = useCallback(async () => {
     try {
       const response = await degreesAPI.getAll();
       setDegrees(response.data);
@@ -35,9 +28,9 @@ function CandidateForm() {
       setError('Failed to fetch degrees');
       console.error('Error fetching degrees:', err);
     }
-  };
+  }, []);
 
-  const fetchCandidate = async () => {
+  const fetchCandidate = useCallback(async () => {
     try {
       const response = await candidatesAPI.getById(id);
       const candidate = response.data;
@@ -52,7 +45,14 @@ function CandidateForm() {
       setError('Failed to fetch candidate');
       console.error('Error fetching candidate:', err);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchDegrees();
+    if (isEdit) {
+      fetchCandidate();
+    }
+  }, [isEdit, fetchDegrees, fetchCandidate]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
