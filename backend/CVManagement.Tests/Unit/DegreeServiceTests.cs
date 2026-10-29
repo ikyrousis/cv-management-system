@@ -127,6 +127,31 @@ public sealed class DegreeServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_UniqueConstraintRaceAtSave_ReturnsValidationFailure()
+    {
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<int>(new UniqueConstraintViolationException("dup", new Exception())));
+
+        var result = await CreateSut().CreateAsync(new DegreeRequest { Name = "BSc" });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.Validation, result.Failure.Kind);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_UniqueConstraintRaceAtSave_ReturnsValidationFailure()
+    {
+        _degrees.FindAsync(1).Returns(new Degree { Id = 1, Name = "BSc" });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<int>(new UniqueConstraintViolationException("dup", new Exception())));
+
+        var result = await CreateSut().UpdateAsync(1, new DegreeRequest { Name = "MSc" });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.Validation, result.Failure.Kind);
+    }
+
+    [Fact]
     public async Task GetAsync_MissingDegree_ReturnsNotFound()
     {
         _degrees.GetAsync(5).Returns((DegreeDto?)null);

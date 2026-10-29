@@ -35,6 +35,7 @@ internal class ApplicationDbContext : DbContext
         modelBuilder.Entity<Degree>(entity =>
         {
             entity.Property(d => d.Name).IsRequired().HasMaxLength(100);
+            entity.HasIndex(d => d.Name).IsUnique();
         });
     }
 }

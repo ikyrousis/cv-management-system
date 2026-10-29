@@ -173,6 +173,30 @@ public sealed class CandidateDegreeLifecycleTests
         }
     }
 
+    [Fact]
+    public async Task ConcurrentCreateSameName_ExactlyOneSucceeds()
+    {
+        if (SkipWithoutDocker())
+        {
+            return;
+        }
+
+        var client = _fixture.Factory!.CreateClient();
+        var name = $"Race {Guid.NewGuid().ToString("N")[..12]}";
+
+        var responses = await Task.WhenAll(
+            client.PostAsJsonAsync("/api/degrees", new { name }),
+            client.PostAsJsonAsync("/api/degrees", new { name }));
+
+        var codes = responses.Select(r => r.StatusCode).ToList();
+        Assert.Equal(1, codes.Count(c => c == HttpStatusCode.Created));
+        Assert.Equal(1, codes.Count(c => c == HttpStatusCode.BadRequest));
+
+        var list = await client.GetFromJsonAsync<List<DegreePayload>>("/api/degrees");
+        var survivor = list!.Single(d => d.Name == name);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/degrees/{survivor.Id}")).StatusCode);
+    }
+
     private sealed record DegreePayload(int Id, string Name);
 
     private sealed record CandidatePayload(int Id, string FirstName, string LastName, string Email);

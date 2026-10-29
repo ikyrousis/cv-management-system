@@ -43,7 +43,15 @@ public sealed class DegreeService : IDegreeService
         var degree = new Degree { Name = request.Name };
 
         _degrees.Add(degree);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (UniqueConstraintViolationException)
+        {
+            return Result<DegreeDto>.Fail(ServiceFailure.Validation("A degree with this name already exists"));
+        }
 
         // Re-read through the single projection so the response always reflects persisted state.
         var created = await _degrees.GetAsync(degree.Id, cancellationToken);
@@ -67,7 +75,15 @@ public sealed class DegreeService : IDegreeService
         }
 
         degree.Name = request.Name;
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (UniqueConstraintViolationException)
+        {
+            return Result.Fail(ServiceFailure.Validation("A degree with this name already exists"));
+        }
 
         return Result.Success();
     }
