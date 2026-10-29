@@ -40,9 +40,10 @@ Compose mode and host mode both bind ports 5293 and 3000, so they cannot run at 
 Requires no other stack running: `docker compose down` first (see port note above).
 
 1. Start the database: `docker compose up -d sql`
-2. Set the connection string once (Development only):
+2. Set the connection string and encryption key once (Development only):
    ```bash
    dotnet user-secrets set "ConnectionStrings:CVManagement" "Server=localhost,1433;Database=CVManagementDB;User Id=sa;Password=<your .env password>;TrustServerCertificate=True"
+   dotnet user-secrets set "CvEncryption:Key" "$(openssl rand -base64 32)"
    ```
 3. `dotnet run --project backend/CVManagement`
 
@@ -197,9 +198,12 @@ List endpoints accept optional `?page=&pageSize=` (pageSize defaults to 10 when 
 
 - Structured logging via Serilog to the console (docker logs). We log requests (method, path, status, duration), startup, and infrastructure warnings; services and controllers contain no log statements.
 - Privacy rule for any future log line: identify by numeric ID, never by content. Names, emails, mobiles, and CV file names are never logged; request bodies are never logged.
-- `Microsoft.*` logging is pinned to Warning because EF Core logs SQL statements with parameter values at Information level.
+- App-level symmetric encryption (AES-256-GCM): candidate first/last name, email, mobile, CV file name, and CV bytes are encrypted by the application before storage; SQL Server holds only ciphertext for those columns. The key is a 32-byte base64 value from the environment or user-secrets, never committed
+- Encrypted columns cannot be searched or uniqueness-checked in the database; the app queries only IDs, which stay plaintext
+- Losing the encryption key makes stored CVs and personal fields permanently unreadable; there is no recovery path
+- `Microsoft.*` logging is pinned to Warning because EF Core logs SQL statements with parameter values at Information level
 - Data persists in SQL Server; the Docker volume `sqldata` keeps it across container restarts
-- CV files are stored in the database as `varbinary`; uploads are capped at 20 MB
+- CV files are stored in the database as encrypted `varbinary` (AES-256-GCM); uploads are capped at 20 MB
 - `GET /health` reports Healthy while the app can reach SQL Server
 - The database starts empty; degrees are created through the UI or API
 - The frontend includes proper error handling and user feedback

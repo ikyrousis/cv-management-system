@@ -18,8 +18,8 @@ internal static class Projections
         DegreeName = c.Degree != null ? c.Degree.Name : null,
         CVFileName = c.CVFileName,
         HasCV = c.CVFile != null,
-        CreationTime = c.CreationTime,
-        FullName = c.FirstName + " " + c.LastName
+        CreationTime = c.CreationTime
+        // FullName is filled after materialization; SQL concatenation would join ciphertexts.
     };
 
     public static readonly Expression<Func<Degree, DegreeDto>> DegreeToDto = d => new DegreeDto

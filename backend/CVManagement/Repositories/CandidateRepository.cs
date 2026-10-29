@@ -20,17 +20,33 @@ internal sealed class CandidateRepository : ICandidateRepository
 
         query = Paging.Apply(query, page, pageSize);
 
-        return await query.ToListAsync(cancellationToken);
+        var items = await query.ToListAsync(cancellationToken);
+
+        foreach (var item in items)
+        {
+            item.FullName = $"{item.FirstName} {item.LastName}";
+        }
+
+        return items;
     }
 
     public Task<int> CountAsync(CancellationToken cancellationToken = default)
         => _context.Candidates.CountAsync(cancellationToken);
 
     public async Task<CandidateDto?> GetAsync(int id, CancellationToken cancellationToken = default)
-        => await _context.Candidates
+    {
+        var candidate = await _context.Candidates
             .Where(c => c.Id == id)
             .Select(Projections.CandidateToDto)
             .FirstOrDefaultAsync(cancellationToken);
+
+        if (candidate is not null)
+        {
+            candidate.FullName = $"{candidate.FirstName} {candidate.LastName}";
+        }
+
+        return candidate;
+    }
 
     public Task<Candidate?> FindAsync(int id, CancellationToken cancellationToken = default)
         => _context.Candidates.FirstOrDefaultAsync(c => c.Id == id, cancellationToken);

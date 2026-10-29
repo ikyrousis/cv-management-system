@@ -197,6 +197,46 @@ public sealed class CandidateDegreeLifecycleTests
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/degrees/{survivor.Id}")).StatusCode);
     }
 
+    [Fact]
+    public async Task SensitiveFields_StoredAsCiphertextServedAsPlaintext()
+    {
+        if (SkipWithoutDocker())
+        {
+            return;
+        }
+
+        var client = _fixture.Factory!.CreateClient();
+        var email = $"probe-{Guid.NewGuid():N}@example.com";
+
+        var createResponse = await client.PostAsJsonAsync("/api/candidates", new
+        {
+            firstName = "Cipher",
+            lastName = "Proof",
+            email,
+            mobile = "5556667777"
+        });
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var created = await createResponse.Content.ReadFromJsonAsync<CandidatePayload>();
+
+        Assert.Equal(email, created!.Email);
+
+        using var connection = new Microsoft.Data.SqlClient.SqlConnection(_fixture.ConnectionString);
+        await connection.OpenAsync();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Email, FirstName FROM Candidates WHERE Id = @id";
+        command.Parameters.AddWithValue("@id", created.Id);
+
+        using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        var storedEmail = reader.GetString(0);
+        var storedFirstName = reader.GetString(1);
+
+        Assert.NotEqual(email, storedEmail);
+        Assert.DoesNotContain("@", storedEmail);
+        Assert.NotEqual("Cipher", storedFirstName);
+        Convert.FromBase64String(storedEmail);
+    }
+
     private sealed record DegreePayload(int Id, string Name);
 
     private sealed record CandidatePayload(int Id, string FirstName, string LastName, string Email);

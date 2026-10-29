@@ -39,6 +39,24 @@ try
             "'dotnet user-secrets set ConnectionStrings:CVManagement <value>' (Development) " +
             "or the ConnectionStrings__CVManagement environment variable.");
 
+    var encryptionKey = builder.Configuration["CvEncryption:Key"]
+        ?? throw new InvalidOperationException(
+            "Encryption key 'CvEncryption:Key' is not configured. Set it with " +
+            "'dotnet user-secrets set CvEncryption:Key <base64>' (Development) " +
+            "or the CvEncryption__Key environment variable. Generate one with 'openssl rand -base64 32'.");
+
+    byte[] encryptionKeyBytes;
+    try
+    {
+        encryptionKeyBytes = Convert.FromBase64String(encryptionKey);
+    }
+    catch (FormatException)
+    {
+        throw new InvalidOperationException("CvEncryption:Key must be a base64-encoded 32-byte key.");
+    }
+
+    builder.Services.AddSingleton<IEncryptor>(_ => new AesGcmEncryptor(encryptionKeyBytes));
+
     builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(connectionString));
 
     builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();

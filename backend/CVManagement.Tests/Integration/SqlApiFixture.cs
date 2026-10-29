@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Testcontainers.MsSql;
 
@@ -8,12 +9,17 @@ namespace CVManagement.Tests.Integration;
 public sealed class SqlApiFixture : IAsyncLifetime
 {
     private const string ConnectionStringKey = "ConnectionStrings__CVManagement";
+    private const string EncryptionKey = "CvEncryption__Key";
 
     private MsSqlContainer? _sql;
 
     public static bool DockerAvailable { get; } = ProbeDocker();
 
     public ApiFactory? Factory { get; private set; }
+
+    /// <summary>Raw ADO connection string for at-rest assertions that bypass the app.</summary>
+    public string ConnectionString => _sql?.GetConnectionString()
+        ?? throw new InvalidOperationException("Container not started.");
 
     public async Task InitializeAsync()
     {
@@ -31,6 +37,7 @@ public sealed class SqlApiFixture : IAsyncLifetime
 
         // Program.cs reads config at startup, before factory hooks apply, so inject via environment.
         Environment.SetEnvironmentVariable(ConnectionStringKey, _sql.GetConnectionString());
+        Environment.SetEnvironmentVariable(EncryptionKey, Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
         Factory = new ApiFactory();
     }
 
@@ -43,6 +50,7 @@ public sealed class SqlApiFixture : IAsyncLifetime
         }
 
         Environment.SetEnvironmentVariable(ConnectionStringKey, null);
+        Environment.SetEnvironmentVariable(EncryptionKey, null);
     }
 
     private static bool ProbeDocker()

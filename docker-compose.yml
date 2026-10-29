@@ -20,6 +20,7 @@ services:
       dockerfile: backend/CVManagement/Dockerfile
     environment:
       ConnectionStrings__CVManagement: "Server=sql;Database=CVManagementDB;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
+      CvEncryption__Key: ${CV_ENCRYPTION_KEY:?Set CV_ENCRYPTION_KEY in a .env file next to docker-compose.yml}
     ports:
       - "5293:8080"
     depends_on:
