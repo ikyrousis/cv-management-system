@@ -1,6 +1,6 @@
 namespace CVManagement.Abstractions;
 
-/// <summary>Symmetric encryption at the application boundary; the database only ever stores ciphertext.</summary>
+/// Symmetric encryption at the application boundary; the database only ever stores ciphertext.
 public interface IEncryptor
 {
     string EncryptString(string plaintext);

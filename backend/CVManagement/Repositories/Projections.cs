@@ -4,7 +4,7 @@ using CVManagement.Entities;
 
 namespace CVManagement.Repositories;
 
-/// <summary>Single definition of entity-to-read-model mapping, used by both read and re-read paths.</summary>
+/// Single definition of entity-to-read-model mapping, used by both read and re-read paths.
 internal static class Projections
 {
     public static readonly Expression<Func<Candidate, CandidateDto>> CandidateToDto = c => new CandidateDto

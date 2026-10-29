@@ -11,12 +11,12 @@ public interface IDegreeRepository
 
     Task<DegreeDto?> GetAsync(int id, CancellationToken cancellationToken = default);
 
-    /// <summary>Loads the tracked entity for mutation; commit through <see cref="IUnitOfWork"/>.</summary>
+    /// Loads the tracked entity for mutation; commit through <see cref="IUnitOfWork"/>.
     Task<Degree?> FindAsync(int id, CancellationToken cancellationToken = default);
 
     Task<bool> ExistsAsync(int id, CancellationToken cancellationToken = default);
 
-    /// <summary>Case-insensitive name lookup, optionally excluding one degree.</summary>
+    /// Case-insensitive name lookup, optionally excluding one degree.
     Task<bool> NameTakenAsync(string name, int? excludeId = null, CancellationToken cancellationToken = default);
 
     Task<bool> IsAssignedToCandidatesAsync(int id, CancellationToken cancellationToken = default);

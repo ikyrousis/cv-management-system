@@ -1,9 +1,9 @@
 namespace CVManagement.Repositories;
 
-/// <summary>Shared Skip/Take slicing; no params means no paging.</summary>
+/// Shared Skip/Take slicing; no params means no paging.
 internal static class Paging
 {
-    /// <summary>page defaults to 1 when only pageSize is given; pageSize defaults to 10 when only page is given.</summary>
+    /// page defaults to 1 when only pageSize is given; pageSize defaults to 10 when only page is given.
     public static IQueryable<T> Apply<T>(IQueryable<T> query, int? page, int? pageSize)
     {
         if (page is null && pageSize is null)

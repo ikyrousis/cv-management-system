@@ -2,7 +2,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace CVManagement.Data;
 
-/// <summary>Healthy while the app can reach SQL Server.</summary>
+/// Healthy while the app can reach SQL Server.
 internal sealed class SqlHealthCheck : IHealthCheck
 {
     private readonly ApplicationDbContext _context;

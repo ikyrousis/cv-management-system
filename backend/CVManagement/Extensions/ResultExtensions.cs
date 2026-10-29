@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace CVManagement.Extensions;
 
-/// <summary>Renders a service outcome as an HTTP result, so controllers never branch on failure kinds.</summary>
+/// Renders a service outcome as an HTTP result, so controllers never branch on failure kinds.
 public static class ResultExtensions
 {
     public static IActionResult AsNoContent(this ControllerBase controller, Result result)

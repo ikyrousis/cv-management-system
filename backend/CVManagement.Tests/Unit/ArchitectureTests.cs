@@ -2,7 +2,7 @@ using System.Reflection;
 
 namespace CVManagement.Tests.Unit;
 
-/// <summary>Controllers may depend only on service and DTO types, never on persistence.</summary>
+/// Controllers may depend only on service and DTO types, never on persistence.
 public sealed class ArchitectureTests
 {
     [Fact]

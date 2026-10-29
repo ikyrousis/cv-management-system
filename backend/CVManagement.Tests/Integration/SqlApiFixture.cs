@@ -5,7 +5,7 @@ using Testcontainers.MsSql;
 
 namespace CVManagement.Tests.Integration;
 
-/// <summary>Owns the SQL Server container for the whole test run and the API factory wired to it.</summary>
+/// Owns the SQL Server container for the whole test run and the API factory wired to it.
 public sealed class SqlApiFixture : IAsyncLifetime
 {
     private const string ConnectionStringKey = "ConnectionStrings__CVManagement";
@@ -17,7 +17,7 @@ public sealed class SqlApiFixture : IAsyncLifetime
 
     public ApiFactory? Factory { get; private set; }
 
-    /// <summary>Raw ADO connection string for at-rest assertions that bypass the app.</summary>
+    /// Raw ADO connection string for at-rest assertions that bypass the app.
     public string ConnectionString => _sql?.GetConnectionString()
         ?? throw new InvalidOperationException("Container not started.");
 

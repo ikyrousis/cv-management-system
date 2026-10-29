@@ -179,7 +179,7 @@ public sealed class CandidateService : ICandidateService
             : ServiceFailure.Validation("Invalid degree ID");
     }
 
-    /// <summary>Collapses blank form input to null, keeping "not supplied" distinct from "supplied and wrong".</summary>
+    /// Collapses blank form input to null, keeping "not supplied" distinct from "supplied and wrong".
     private static string? NormalizeMobile(string? mobile)
         => string.IsNullOrWhiteSpace(mobile) ? null : mobile.Trim();
 }

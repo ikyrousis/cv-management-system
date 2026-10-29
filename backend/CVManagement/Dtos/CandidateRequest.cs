@@ -3,7 +3,6 @@ using CVManagement.Validation;
 
 namespace CVManagement.DTOs;
 
-/// <summary>Write contract for candidate create/update; omits server-owned fields to block over-posting.</summary>
 public sealed class CandidateRequest
 {
     [Required(ErrorMessage = "Last name is required")]

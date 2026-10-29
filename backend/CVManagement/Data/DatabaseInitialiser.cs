@@ -7,7 +7,7 @@ public interface IDatabaseInitialiser
     Task InitialiseAsync(CancellationToken cancellationToken = default);
 }
 
-/// <summary>Creates the database on first run, retrying while SQL Server finishes starting.</summary>
+/// Creates the database on first run, retrying while SQL Server finishes starting.
 internal sealed class DatabaseInitialiser : IDatabaseInitialiser
 {
     private const int MaxAttempts = 10;

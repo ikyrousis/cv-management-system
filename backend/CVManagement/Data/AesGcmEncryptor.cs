@@ -4,7 +4,7 @@ using CVManagement.Abstractions;
 
 namespace CVManagement.Data;
 
-/// <summary>AES-256-GCM, random nonce per value, stored as base64 of nonce|tag|ciphertext (strings) or raw nonce|tag|ciphertext (bytes).</summary>
+/// AES-256-GCM, random nonce per value, stored as base64 of nonce|tag|ciphertext (strings) or raw nonce|tag|ciphertext (bytes).
 internal sealed class AesGcmEncryptor : IEncryptor, IDisposable
 {
     private const int KeyBytes = 32;
