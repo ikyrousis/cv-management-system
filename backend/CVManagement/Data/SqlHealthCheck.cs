@@ -1,4 +1,3 @@
-
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace CVManagement.Data;
@@ -7,8 +6,13 @@ namespace CVManagement.Data;
 internal sealed class SqlHealthCheck : IHealthCheck
 {
     private readonly ApplicationDbContext _context;
+    private readonly ILogger<SqlHealthCheck> _logger;
 
-    public SqlHealthCheck(ApplicationDbContext context) => _context = context;
+    public SqlHealthCheck(ApplicationDbContext context, ILogger<SqlHealthCheck> logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
 
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
@@ -18,11 +22,17 @@ internal sealed class SqlHealthCheck : IHealthCheck
         {
             return await _context.Database.CanConnectAsync(cancellationToken)
                 ? HealthCheckResult.Healthy("SQL Server reachable")
-                : HealthCheckResult.Unhealthy("SQL Server did not answer a connectivity check");
+                : Unhealthy("SQL Server did not answer a connectivity check", null);
         }
         catch (Exception ex)
         {
-            return HealthCheckResult.Unhealthy("SQL Server connectivity check failed", ex);
+            return Unhealthy("SQL Server connectivity check failed", ex);
         }
+    }
+
+    private HealthCheckResult Unhealthy(string description, Exception? exception)
+    {
+        _logger.LogWarning(exception, "Health check unhealthy: {Description}", description);
+        return HealthCheckResult.Unhealthy(description, exception);
     }
 }

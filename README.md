@@ -33,7 +33,11 @@ docker compose up --build
 
 Serves the frontend at http://localhost:3000, the API at http://localhost:5293 (Swagger is Development-only), and SQL Server at localhost:1433.
 
+Compose mode and host mode both bind ports 5293 and 3000, so they cannot run at the same time. Run `docker compose down` before starting the backend or frontend on the host.
+
 ### Backend on the host
+
+Requires no other stack running: `docker compose down` first (see port note above).
 
 1. Start the database: `docker compose up -d sql`
 2. Set the connection string once (Development only):
@@ -191,6 +195,9 @@ List endpoints accept optional `?page=&pageSize=` (pageSize defaults to 10 when 
 
 ## Notes
 
+- Structured logging via Serilog to the console (docker logs). We log requests (method, path, status, duration), startup, and infrastructure warnings; services and controllers contain no log statements.
+- Privacy rule for any future log line: identify by numeric ID, never by content. Names, emails, mobiles, and CV file names are never logged; request bodies are never logged.
+- `Microsoft.*` logging is pinned to Warning because EF Core logs SQL statements with parameter values at Information level.
 - Data persists in SQL Server; the Docker volume `sqldata` keeps it across container restarts
 - CV files are stored in the database as `varbinary`; uploads are capped at 20 MB
 - `GET /health` reports Healthy while the app can reach SQL Server

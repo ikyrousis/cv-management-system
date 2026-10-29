@@ -1,9 +1,8 @@
-
 using Microsoft.Data.SqlClient;
 
 namespace CVManagement.Data;
 
-internal interface IDatabaseInitialiser
+public interface IDatabaseInitialiser
 {
     Task InitialiseAsync(CancellationToken cancellationToken = default);
 }
@@ -15,8 +14,13 @@ internal sealed class DatabaseInitialiser : IDatabaseInitialiser
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(3);
 
     private readonly ApplicationDbContext _context;
+    private readonly ILogger<DatabaseInitialiser> _logger;
 
-    public DatabaseInitialiser(ApplicationDbContext context) => _context = context;
+    public DatabaseInitialiser(ApplicationDbContext context, ILogger<DatabaseInitialiser> logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
 
     public async Task InitialiseAsync(CancellationToken cancellationToken = default)
     {
@@ -25,10 +29,12 @@ internal sealed class DatabaseInitialiser : IDatabaseInitialiser
             try
             {
                 await _context.Database.EnsureCreatedAsync(cancellationToken);
+                _logger.LogInformation("Database ready after {Attempts} attempt(s)", attempt);
                 return;
             }
-            catch (SqlException) when (attempt < MaxAttempts)
+            catch (SqlException ex) when (attempt < MaxAttempts)
             {
+                _logger.LogWarning(ex, "Database not reachable (attempt {Attempt}/{MaxAttempts}), retrying", attempt, MaxAttempts);
                 await Task.Delay(RetryDelay, cancellationToken);
             }
         }
