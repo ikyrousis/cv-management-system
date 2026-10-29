@@ -41,7 +41,7 @@ public sealed class DegreesController : ControllerBase
     public async Task<IActionResult> UpdateDegree(int id, DegreeRequest request, CancellationToken cancellationToken)
         => this.AsNoContent(await _degrees.UpdateAsync(id, request, cancellationToken));
 
-    /// Literal segment keeps this route distinct from <c>{id:int}</c> without relying on route precedence.
+    /// Literal segment keeps this route distinct from {id:int} without relying on route precedence.
     [HttpDelete("cleanup")]
     public async Task<ActionResult<DegreeCleanupDto>> CleanupUnusedDegrees(CancellationToken cancellationToken)
         => Ok(await _degrees.CleanupUnassignedAsync(cancellationToken));

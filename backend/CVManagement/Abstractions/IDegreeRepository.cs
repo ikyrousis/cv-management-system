@@ -11,7 +11,7 @@ public interface IDegreeRepository
 
     Task<DegreeDto?> GetAsync(int id, CancellationToken cancellationToken = default);
 
-    /// Loads the tracked entity for mutation; commit through <see cref="IUnitOfWork"/>.
+    /// Loads the tracked entity for mutation; commit through IUnitOfWork.
     Task<Degree?> FindAsync(int id, CancellationToken cancellationToken = default);
 
     Task<bool> ExistsAsync(int id, CancellationToken cancellationToken = default);

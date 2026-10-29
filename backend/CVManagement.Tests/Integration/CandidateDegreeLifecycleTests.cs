@@ -1,3 +1,4 @@
+using CVManagement.DTOs;
 using Xunit;
 
 namespace CVManagement.Tests.Integration;
@@ -6,34 +7,13 @@ namespace CVManagement.Tests.Integration;
 public sealed class CandidateDegreeLifecycleTests
 {
     private readonly SqlApiFixture _fixture;
-    private readonly ITestOutputHelper _output;
 
-    public CandidateDegreeLifecycleTests(SqlApiFixture fixture, ITestOutputHelper output)
-    {
-        _fixture = fixture;
-        _output = output;
-    }
-
-    private bool SkipWithoutDocker()
-    {
-        if (!SqlApiFixture.DockerAvailable || _fixture.Factory is null)
-        {
-            _output.WriteLine("SKIPPED: Docker is not running; start Docker Desktop to execute integration tests.");
-            return true;
-        }
-
-        return false;
-    }
+    public CandidateDegreeLifecycleTests(SqlApiFixture fixture) => _fixture = fixture;
 
     [Fact]
     public async Task FullLifecycle_DegreeBlocksWhileAssigned_ThenCleansUp()
     {
-        if (SkipWithoutDocker())
-        {
-            return;
-        }
-
-        var client = _fixture.Factory!.CreateClient();
+        var client = _fixture.Factory.CreateClient();
 
         var degreeResponse = await client.PostAsJsonAsync("/api/degrees", new { name = "BSc Integration" });
         degreeResponse.EnsureSuccessStatusCode();
@@ -54,6 +34,7 @@ public sealed class CandidateDegreeLifecycleTests
 
         var blockedDelete = await client.DeleteAsync($"/api/degrees/{degree.Id}");
         Assert.Equal(HttpStatusCode.BadRequest, blockedDelete.StatusCode);
+        Assert.Contains("assigned", await blockedDelete.Content.ReadAsStringAsync());
 
         var deleteCandidate = await client.DeleteAsync($"/api/candidates/{candidate!.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleteCandidate.StatusCode);
@@ -68,12 +49,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task UploadAndDownloadCv_RoundTrips()
     {
-        if (SkipWithoutDocker())
-        {
-            return;
-        }
-
-        var client = _fixture.Factory!.CreateClient();
+        var client = _fixture.Factory.CreateClient();
 
         var candidateResponse = await client.PostAsJsonAsync("/api/candidates", new
         {
@@ -84,24 +60,28 @@ public sealed class CandidateDegreeLifecycleTests
         Assert.Equal(HttpStatusCode.Created, candidateResponse.StatusCode);
         var candidate = await candidateResponse.Content.ReadFromJsonAsync<CandidatePayload>();
 
-        using var form = new MultipartFormDataContent
+        var content = new byte[] { 1, 2, 3 };
+
+        using (var form = new MultipartFormDataContent
         {
             {
-                new ByteArrayContent(new byte[] { 1, 2, 3 })
+                new ByteArrayContent(content)
                 {
                     Headers = { ContentType = new MediaTypeHeaderValue("application/pdf") }
                 },
                 "file",
                 "cv.pdf"
             }
-        };
-        var upload = await client.PostAsync($"/api/candidates/{candidate!.Id}/cv", form);
-        upload.EnsureSuccessStatusCode();
+        })
+        {
+            var upload = await client.PostAsync($"/api/candidates/{candidate!.Id}/cv", form);
+            upload.EnsureSuccessStatusCode();
+        }
 
         var download = await client.GetAsync($"/api/candidates/{candidate.Id}/cv");
         download.EnsureSuccessStatusCode();
         Assert.Equal("application/pdf", download.Content.Headers.ContentType?.MediaType);
-        Assert.Equal(new byte[] { 1, 2, 3 }, await download.Content.ReadAsByteArrayAsync());
+        Assert.Equal(content, await download.Content.ReadAsByteArrayAsync());
 
         using var rejected = new MultipartFormDataContent
         {
@@ -116,17 +96,14 @@ public sealed class CandidateDegreeLifecycleTests
         };
         var rejectedUpload = await client.PostAsync($"/api/candidates/{candidate.Id}/cv", rejected);
         Assert.Equal(HttpStatusCode.BadRequest, rejectedUpload.StatusCode);
+
+        await client.DeleteAsync($"/api/candidates/{candidate.Id}");
     }
 
     [Fact]
     public async Task HealthEndpoint_ReportsHealthy()
     {
-        if (SkipWithoutDocker())
-        {
-            return;
-        }
-
-        var client = _fixture.Factory!.CreateClient();
+        var client = _fixture.Factory.CreateClient();
 
         var response = await client.GetAsync("/health");
 
@@ -137,12 +114,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task Pagination_SlicesResultsAndReportsTotal()
     {
-        if (SkipWithoutDocker())
-        {
-            return;
-        }
-
-        var client = _fixture.Factory!.CreateClient();
+        var client = _fixture.Factory.CreateClient();
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var created = new List<int>();
@@ -174,14 +146,22 @@ public sealed class CandidateDegreeLifecycleTests
     }
 
     [Fact]
+    public async Task Pagination_BeyondLastPage_ReturnsEmptyWithTotal()
+    {
+        var client = _fixture.Factory.CreateClient();
+
+        var page = await client.GetAsync("/api/degrees?page=2147483647&pageSize=100");
+
+        page.EnsureSuccessStatusCode();
+        var items = await page.Content.ReadFromJsonAsync<List<DegreePayload>>();
+        Assert.Empty(items!);
+        Assert.True(page.Headers.TryGetValues("X-Total-Count", out _));
+    }
+
+    [Fact]
     public async Task ConcurrentCreateSameName_ExactlyOneSucceeds()
     {
-        if (SkipWithoutDocker())
-        {
-            return;
-        }
-
-        var client = _fixture.Factory!.CreateClient();
+        var client = _fixture.Factory.CreateClient();
         var name = $"Race {Guid.NewGuid().ToString("N")[..12]}";
 
         var responses = await Task.WhenAll(
@@ -200,12 +180,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task SensitiveFields_StoredAsCiphertextServedAsPlaintext()
     {
-        if (SkipWithoutDocker())
-        {
-            return;
-        }
-
-        var client = _fixture.Factory!.CreateClient();
+        var client = _fixture.Factory.CreateClient();
         var email = $"probe-{Guid.NewGuid():N}@example.com";
 
         var createResponse = await client.PostAsJsonAsync("/api/candidates", new
@@ -223,18 +198,105 @@ public sealed class CandidateDegreeLifecycleTests
         using var connection = new Microsoft.Data.SqlClient.SqlConnection(_fixture.ConnectionString);
         await connection.OpenAsync();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Email, FirstName FROM Candidates WHERE Id = @id";
+        command.CommandText = "SELECT Email, FirstName, Mobile FROM Candidates WHERE Id = @id";
         command.Parameters.AddWithValue("@id", created.Id);
 
         using var reader = await command.ExecuteReaderAsync();
         await reader.ReadAsync();
         var storedEmail = reader.GetString(0);
         var storedFirstName = reader.GetString(1);
+        var storedMobile = reader.GetString(2);
 
         Assert.NotEqual(email, storedEmail);
         Assert.DoesNotContain("@", storedEmail);
         Assert.NotEqual("Cipher", storedFirstName);
+        Assert.NotEqual("5556667777", storedMobile);
         Convert.FromBase64String(storedEmail);
+
+        await client.DeleteAsync($"/api/candidates/{created.Id}");
+    }
+
+    [Fact]
+    public async Task CvBytes_StoredEncryptedAndDecryptedForDownload()
+    {
+        var client = _fixture.Factory.CreateClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/candidates", new
+        {
+            firstName = "Byte",
+            lastName = "Vault",
+            email = $"cv-{Guid.NewGuid():N}@example.com"
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<CandidatePayload>();
+
+        var original = new byte[] { 0x25, 0x50, 0x44, 0x46 };
+
+        using (var form = new MultipartFormDataContent
+        {
+            {
+                new ByteArrayContent(original)
+                {
+                    Headers = { ContentType = new MediaTypeHeaderValue("application/pdf") }
+                },
+                "file",
+                "secret-cv.pdf"
+            }
+        })
+        {
+            (await client.PostAsync($"/api/candidates/{created!.Id}/cv", form)).EnsureSuccessStatusCode();
+        }
+
+        byte[] stored;
+        using (var connection = new Microsoft.Data.SqlClient.SqlConnection(_fixture.ConnectionString))
+        {
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT CVFile, CVFileName FROM Candidates WHERE Id = @id";
+            command.Parameters.AddWithValue("@id", created.Id);
+            using var reader = await command.ExecuteReaderAsync();
+            await reader.ReadAsync();
+            stored = (byte[])reader[0];
+            var storedName = reader.GetString(1);
+            Assert.NotEqual("secret-cv.pdf", storedName);
+            Convert.FromBase64String(storedName);
+        }
+
+        // nonce(12) + tag(16) + ciphertext(len): the column is larger than the original and shares no prefix.
+        Assert.Equal(28 + original.Length, stored.Length);
+        Assert.False(original.AsSpan().SequenceEqual(stored.AsSpan(0, original.Length)));
+
+        var download = await client.GetAsync($"/api/candidates/{created.Id}/cv");
+        download.EnsureSuccessStatusCode();
+        Assert.Equal(original, await download.Content.ReadAsByteArrayAsync());
+
+        await client.DeleteAsync($"/api/candidates/{created.Id}");
+    }
+
+    [Fact]
+    public async Task NullOptionalFields_StoredAsNullNotAsEncryptedEmpty()
+    {
+        var client = _fixture.Factory.CreateClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/candidates", new
+        {
+            firstName = "Null",
+            lastName = "Safe",
+            email = $"null-{Guid.NewGuid():N}@example.com"
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<CandidatePayload>();
+
+        using var connection = new Microsoft.Data.SqlClient.SqlConnection(_fixture.ConnectionString);
+        await connection.OpenAsync();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Mobile, CVFile FROM Candidates WHERE Id = @id";
+        command.Parameters.AddWithValue("@id", created!.Id);
+        using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+
+        Assert.True(reader.IsDBNull(0));
+        Assert.True(reader.IsDBNull(1));
+
+        await client.DeleteAsync($"/api/candidates/{created.Id}");
     }
 
     private sealed record DegreePayload(int Id, string Name);

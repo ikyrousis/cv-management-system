@@ -194,6 +194,91 @@ public sealed class CandidateServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_HappyPath_MutatesTrackedEntityAndSaves()
+    {
+        var candidate = new Candidate { Id = 1, FirstName = "Old", LastName = "Name", Email = "old@example.com" };
+        _candidates.FindAsync(1).Returns(candidate);
+        _degrees.ExistsAsync(7).Returns(true);
+        var request = new CandidateRequest
+        {
+            FirstName = "New",
+            LastName = "Name",
+            Email = "new@example.com",
+            Mobile = " 0712345678 ",
+            DegreeId = 7
+        };
+
+        var result = await CreateSut().UpdateAsync(1, request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("New", candidate.FirstName);
+        Assert.Equal("new@example.com", candidate.Email);
+        Assert.Equal("0712345678", candidate.Mobile);
+        Assert.Equal(7, candidate.DegreeId);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAllAsync_NoParameters_PassesNullsAndWrapsResult()
+    {
+        var items = new List<CandidateDto> { new() { Id = 1 } };
+        _candidates.GetAllAsync(null, null, Arg.Any<CancellationToken>()).Returns(items);
+        _candidates.CountAsync(Arg.Any<CancellationToken>()).Returns(7);
+
+        var result = await CreateSut().GetAllAsync();
+
+        Assert.Same(items, result.Items);
+        Assert.Equal(7, result.TotalCount);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_MissingCandidate_ReturnsNotFound()
+    {
+        _candidates.FindAsync(9).Returns((Candidate?)null);
+
+        var result = await CreateSut().DeleteAsync(9);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.NotFound, result.Failure.Kind);
+        _candidates.DidNotReceiveWithAnyArgs().Remove(default!);
+    }
+
+    [Fact]
+    public async Task UploadCvAsync_MissingCandidate_ReturnsNotFound()
+    {
+        _candidates.FindAsync(3).Returns((Candidate?)null);
+
+        var result = await CreateSut().UploadCvAsync(3, new CvUpload(new byte[] { 1 }, "cv.pdf", "application/pdf"));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.NotFound, result.Failure.Kind);
+    }
+
+    [Fact]
+    public async Task GetCvAsync_HappyPath_ReturnsStoredContent()
+    {
+        var cv = new CvFileDto { Content = new byte[] { 5 }, FileName = "cv.pdf", ContentType = "application/pdf" };
+        _candidates.ExistsAsync(1).Returns(true);
+        _candidates.GetCvAsync(1).Returns(cv);
+
+        var result = await CreateSut().GetCvAsync(1);
+
+        Assert.True(result.IsSuccess);
+        Assert.Same(cv, result.Value);
+    }
+
+    [Fact]
+    public async Task DeleteCvAsync_MissingCandidate_ReturnsNotFound()
+    {
+        _candidates.FindAsync(2).Returns((Candidate?)null);
+
+        var result = await CreateSut().DeleteCvAsync(2);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.NotFound, result.Failure.Kind);
+    }
+
+    [Fact]
     public async Task DeleteAsync_ExistingCandidate_RemovesAndSaves()
     {
         var candidate = new Candidate { Id = 1 };

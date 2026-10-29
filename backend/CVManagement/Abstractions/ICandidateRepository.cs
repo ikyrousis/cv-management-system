@@ -12,7 +12,7 @@ public interface ICandidateRepository
 
     Task<CandidateDto?> GetAsync(int id, CancellationToken cancellationToken = default);
 
-    /// Loads the tracked entity for mutation; commit through <see cref="IUnitOfWork"/>.
+    /// Loads the tracked entity for mutation; commit through IUnitOfWork.
     Task<Candidate?> FindAsync(int id, CancellationToken cancellationToken = default);
 
     Task<CvFileDto?> GetCvAsync(int id, CancellationToken cancellationToken = default);

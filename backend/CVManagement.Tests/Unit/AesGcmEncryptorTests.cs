@@ -17,10 +17,10 @@ public sealed class AesGcmEncryptorTests : IDisposable
     [Fact]
     public void StringRoundTrip_ReturnsPlaintext_AndCiphertextHidesIt()
     {
-        var protectedValue = _encryptor.EncryptString("jane@example.com");
+        var ciphertext = _encryptor.EncryptString("jane@example.com");
 
-        Assert.DoesNotContain("@", protectedValue);
-        Assert.Equal("jane@example.com", _encryptor.DecryptString(protectedValue));
+        Assert.DoesNotContain("@", ciphertext);
+        Assert.Equal("jane@example.com", _encryptor.DecryptString(ciphertext));
     }
 
     [Fact]
@@ -28,46 +28,130 @@ public sealed class AesGcmEncryptorTests : IDisposable
     {
         var content = Encoding.UTF8.GetBytes("%PDF-1.4 fake cv content");
 
-        var protectedValue = _encryptor.EncryptBytes(content);
+        var ciphertext = _encryptor.EncryptBytes(content);
 
-        Assert.NotEqual(content, protectedValue);
-        Assert.Equal(content, _encryptor.DecryptBytes(protectedValue));
+        Assert.NotEqual(content, ciphertext);
+        Assert.Equal(content, _encryptor.DecryptBytes(ciphertext));
     }
 
     [Fact]
-    public void SameInputTwice_ProducesDifferentCiphertext()
+    public void SameInputHundredTimes_ProducesDistinctCiphertexts()
     {
-        var first = _encryptor.EncryptString("same input");
-        var second = _encryptor.EncryptString("same input");
+        var outputs = Enumerable.Range(0, 100)
+            .Select(_ => _encryptor.EncryptString("same input"))
+            .Distinct()
+            .ToList();
 
-        Assert.NotEqual(first, second);
-        Assert.Equal(first.Length, second.Length);
+        Assert.Equal(100, outputs.Count);
     }
 
-    [Fact]
-    public void TamperedPayload_FailsTagCheck()
+    [Theory]
+    [InlineData(0, "nonce byte")]
+    [InlineData(12, "tag byte")]
+    [InlineData(28, "first ciphertext byte")]
+    [InlineData(43, "last ciphertext byte")]
+    public void SingleByteFlipAtAnySegment_FailsTagCheck(int position, string _)
     {
-        var payload = _encryptor.EncryptBytes(new byte[] { 1, 2, 3, 4 });
-        payload[^1] ^= 0xFF;
+        var payload = _encryptor.EncryptBytes(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 });
+        payload[position] ^= 0x01;
 
         Assert.ThrowsAny<CryptographicException>(() => _encryptor.DecryptBytes(payload));
     }
 
-    [Fact]
-    public void WrongKey_CannotDecrypt()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(11)]
+    [InlineData(27)]
+    public void TruncatedBelowNoncePlusTag_Rejected(int truncateTo)
     {
-        using var other = new AesGcmEncryptor(RandomNumberGenerator.GetBytes(32));
-        var protectedValue = _encryptor.EncryptString("secret");
+        var payload = _encryptor.EncryptBytes(new byte[] { 1, 2, 3, 4 });
 
-        Assert.ThrowsAny<CryptographicException>(() => other.DecryptString(protectedValue));
+        Assert.ThrowsAny<CryptographicException>(() => _encryptor.DecryptBytes(payload[..truncateTo]));
+    }
+
+    [Fact]
+    public void EmptyPlaintext_StoresExactlyNonceAndTag()
+    {
+        var payload = _encryptor.EncryptBytes(Array.Empty<byte>());
+
+        Assert.Equal(28, payload.Length);
+        Assert.Empty(_encryptor.DecryptBytes(payload));
+    }
+
+    [Fact]
+    public void CorruptedBase64String_ThrowsFormatException()
+    {
+        Assert.Throws<FormatException>(() => _encryptor.DecryptString("!!!not-base64!!!"));
+    }
+
+    [Fact]
+    public void ValidButForeignBase64String_FailsTagCheck()
+    {
+        var foreign = Convert.ToBase64String(RandomNumberGenerator.GetBytes(60));
+
+        Assert.ThrowsAny<CryptographicException>(() => _encryptor.DecryptString(foreign));
     }
 
     [Theory]
-    [InlineData(16)]
-    [InlineData(31)]
-    [InlineData(33)]
-    public void InvalidKeyLength_Rejected(int length)
+    [InlineData("")]
+    [InlineData("é")]
+    [InlineData("中文 èspresso")]
+    [InlineData("emoji \U0001F600 \U0001F3C6")]
+    [InlineData("a-long-ish.email+tag@sub.domain.example.co.uk")]
+    public void AwkwardStrings_RoundTrip(string plaintext)
     {
-        Assert.Throws<ArgumentException>(() => new AesGcmEncryptor(new byte[length]));
+        Assert.Equal(plaintext, _encryptor.DecryptString(_encryptor.EncryptString(plaintext)));
+    }
+
+    [Fact]
+    public void OneMegabyte_RoundTripsIntact()
+    {
+        var big = RandomNumberGenerator.GetBytes(1024 * 1024);
+
+        Assert.Equal(big, _encryptor.DecryptBytes(_encryptor.EncryptBytes(big)));
+    }
+
+    [Fact]
+    public void KeyBitFlip_CannotDecryptAnotherKeysOutput()
+    {
+        var tamperedKey = (byte[])_key.Clone();
+        tamperedKey[0] ^= 0x01;
+
+        using var other = new AesGcmEncryptor(tamperedKey);
+        var ciphertext = _encryptor.EncryptString("secret");
+
+        Assert.ThrowsAny<CryptographicException>(() => other.DecryptString(ciphertext));
+    }
+
+    [Fact]
+    public void WrongKeyLengths_Rejected()
+    {
+        Assert.Throws<ArgumentException>(() => new AesGcmEncryptor(new byte[16]));
+        Assert.Throws<ArgumentException>(() => new AesGcmEncryptor(new byte[31]));
+        Assert.Throws<ArgumentException>(() => new AesGcmEncryptor(new byte[33]));
+    }
+
+    [Fact]
+    public void TwoHundredConcurrentRoundTrips_OnSharedInstance_AllSucceed()
+    {
+        var failures = new System.Collections.Concurrent.ConcurrentBag<int>();
+
+        Parallel.For(0, 200, i =>
+        {
+            try
+            {
+                var text = $"concurrent payload {i}";
+                if (_encryptor.DecryptString(_encryptor.EncryptString(text)) != text)
+                {
+                    failures.Add(i);
+                }
+            }
+            catch
+            {
+                failures.Add(i);
+            }
+        });
+
+        Assert.Empty(failures);
     }
 }

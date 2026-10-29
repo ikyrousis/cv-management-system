@@ -53,7 +53,9 @@ Requires no other stack running: `docker compose down` first (see port note abov
 dotnet test backend/CVManagement.Tests
 ```
 
-Unit tests always run. Integration tests spin up a SQL Server container via Testcontainers and skip themselves (logged as SKIPPED) when Docker is not running.
+Unit tests always run. Integration tests boot the real API against a SQL Server container via Testcontainers and require Docker; without it they fail.
+
+Frontend tests are deferred: `react-scripts` test ships jest 27, which cannot resolve `react-router-dom` v7, and every component imports the router. Revisit by downgrading the router or replacing the CRA toolchain.
 
 ### Frontend on the host (development)
 

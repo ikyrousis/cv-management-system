@@ -68,8 +68,14 @@ try
 
     builder.Services.AddScoped<IDatabaseInitialiser, DatabaseInitialiser>();
 
-    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-        ?? Array.Empty<string>();
+    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+
+    if (allowedOrigins is null || allowedOrigins.Length == 0)
+    {
+        throw new InvalidOperationException(
+            "No CORS origins configured. Set 'Cors:AllowedOrigins' in configuration to the frontend URLs; " +
+            "without it the frontend would be blocked with no clear cause.");
+    }
 
     builder.Services.AddCors(options =>
     {

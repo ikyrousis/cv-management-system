@@ -56,6 +56,20 @@ public sealed class DegreeServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_HappyPath_RenamesAndSaves()
+    {
+        var degree = new Degree { Id = 1, Name = "BSc" };
+        _degrees.FindAsync(1).Returns(degree);
+        _degrees.NameTakenAsync("MSc", Arg.Is<int?>(x => x == 1), Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await CreateSut().UpdateAsync(1, new DegreeRequest { Name = "MSc" });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("MSc", degree.Name);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task DeleteAsync_DegreeAssignedToCandidates_IsBlocked()
     {
         var degree = new Degree { Id = 1, Name = "BSc" };

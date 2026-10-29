@@ -1,4 +1,3 @@
-using System.IO.Pipes;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Testcontainers.MsSql;
@@ -13,22 +12,16 @@ public sealed class SqlApiFixture : IAsyncLifetime
 
     private MsSqlContainer? _sql;
 
-    public static bool DockerAvailable { get; } = ProbeDocker();
-
-    public ApiFactory? Factory { get; private set; }
+    public ApiFactory Factory { get; private set; } = null!;
 
     /// Raw ADO connection string for at-rest assertions that bypass the app.
-    public string ConnectionString => _sql?.GetConnectionString()
-        ?? throw new InvalidOperationException("Container not started.");
+    public string ConnectionString => _sql is null
+        ? throw new InvalidOperationException("SQL Server container did not start; integration tests require Docker.")
+        : _sql.GetConnectionString();
 
     public async Task InitializeAsync()
     {
-        if (!DockerAvailable)
-        {
-            return;
-        }
-
-        // Built lazily: MsSqlBuilder.Build() throws when Docker is unreachable.
+        // No Docker fallback: StartAsync throws when the engine is missing, failing the tests loudly.
         _sql = new MsSqlBuilder()
             .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
             .Build();
@@ -38,12 +31,14 @@ public sealed class SqlApiFixture : IAsyncLifetime
         // Program.cs reads config at startup, before factory hooks apply, so inject via environment.
         Environment.SetEnvironmentVariable(ConnectionStringKey, _sql.GetConnectionString());
         Environment.SetEnvironmentVariable(EncryptionKey, Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
+
         Factory = new ApiFactory();
     }
 
     public async Task DisposeAsync()
     {
-        Factory?.Dispose();
+        Factory.Dispose();
+
         if (_sql is not null)
         {
             await _sql.DisposeAsync();
@@ -51,25 +46,6 @@ public sealed class SqlApiFixture : IAsyncLifetime
 
         Environment.SetEnvironmentVariable(ConnectionStringKey, null);
         Environment.SetEnvironmentVariable(EncryptionKey, null);
-    }
-
-    private static bool ProbeDocker()
-    {
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOCKER_HOST")))
-        {
-            return true;
-        }
-
-        try
-        {
-            using var pipe = new NamedPipeClientStream(".", "docker_engine", PipeDirection.Out);
-            pipe.Connect(TimeSpan.FromSeconds(2).Milliseconds);
-            return true;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
     }
 }
 
