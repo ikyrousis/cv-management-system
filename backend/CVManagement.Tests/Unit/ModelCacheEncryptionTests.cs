@@ -29,8 +29,8 @@ public sealed class ModelCacheEncryptionTests
 
         var stored = (string)EmailConverter(secondContext).ConvertToProvider(ProbeEmail)!;
 
-        Assert.Equal(ProbeEmail, secondEncryptor.DecryptString(stored));
-        Assert.ThrowsAny<CryptographicException>(() => firstEncryptor.DecryptString(stored));
+        Assert.Equal(ProbeEmail, secondEncryptor.DecryptString(stored, "Candidate.Email"));
+        Assert.ThrowsAny<CryptographicException>(() => firstEncryptor.DecryptString(stored, "Candidate.Email"));
     }
 
     [Fact]

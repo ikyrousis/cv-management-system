@@ -14,6 +14,9 @@ public sealed class SqlApiFixture : IAsyncLifetime
 
     public ApiFactory Factory { get; private set; } = null!;
 
+    /// The key material the API boots with, so a test can plant a value in a chosen stored format.
+    public byte[] EncryptionKeyBytes { get; private set; } = [];
+
     /// Raw ADO connection string for at-rest assertions that bypass the app.
     public string ConnectionString => _sql is null
         ? throw new InvalidOperationException("SQL Server container did not start; integration tests require Docker.")
@@ -30,7 +33,8 @@ public sealed class SqlApiFixture : IAsyncLifetime
 
         // Program.cs reads config at startup, before factory hooks apply, so inject via environment.
         Environment.SetEnvironmentVariable(ConnectionStringKey, _sql.GetConnectionString());
-        Environment.SetEnvironmentVariable(EncryptionKey, Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
+        EncryptionKeyBytes = RandomNumberGenerator.GetBytes(32);
+        Environment.SetEnvironmentVariable(EncryptionKey, Convert.ToBase64String(EncryptionKeyBytes));
 
         Factory = new ApiFactory();
     }

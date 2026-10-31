@@ -144,7 +144,7 @@ the query projections.
 
 ## API Endpoints
 
-List endpoints accept optional `?page=&pageSize=` (pageSize defaults to 10 when paging, max 100; without params the full list is returned). The total count is always sent in the `X-Total-Count` response header.
+List endpoints accept optional `?page=&pageSize=` (pageSize defaults to 10 when paging, max 100; without params the full list is returned). The total count is always sent in the `X-Total-Count` response header, which is exposed to cross-origin scripts through `Access-Control-Expose-Headers`.
 
 ### Candidates
 - `GET /api/candidates` - Get all candidates
@@ -202,6 +202,8 @@ List endpoints accept optional `?page=&pageSize=` (pageSize defaults to 10 when 
 - Structured logging via Serilog to the console (docker logs). We log requests (method, path, status, duration), startup, and infrastructure warnings; services and controllers contain no log statements.
 - Privacy rule for any future log line: identify by numeric ID, never by content. Names, emails, mobiles, and CV file names are never logged; request bodies are never logged.
 - App-level symmetric encryption (AES-256-GCM): candidate first/last name, email, mobile, CV file name, and CV bytes are encrypted by the application before storage; SQL Server holds only ciphertext for those columns. The key is a 32-byte base64 value from the environment or user-secrets, never committed
+- Stored values are versioned: marker(1) | nonce(12) | tag(16) | ciphertext, base64 for text columns and raw bytes for the CV. The column name is authenticated data, so ciphertext copied from one protected column into another does not verify. Unversioned values written before that layout stay readable, and the fallback can go once no such row remains
+- Copying a ciphertext between two rows of the same column still verifies: a value converter sees only the value, never the row id, so per-row binding needs either a MAC column over the row or encryption outside the converter layer
 - Deleting a candidate and clearing its CV work from the key alone, so a row whose protected columns cannot be decrypted can still be removed and its CV still detached. Updating a candidate reads the protected columns, because clearing a stored mobile to empty has to be distinguishable from leaving it untouched.
 - Encrypted columns carry no queryable meaning: a predicate over one is translated with a freshly encrypted operand, so it matches nothing and returns an empty result instead of failing, and ordering by one orders ciphertext. Every read therefore goes by `Id`, which stays plaintext, and `ArchitectureTests` keeps the queryable surface inside `Data/` and `Repositories/` so no other tier can write such a predicate by accident.
 - Decrypt faults (`CryptographicException`, `FormatException`) escape the value converters during materialization. `Extensions/EncryptionExceptionHandler` answers them with a fixed 500 ProblemDetails carrying no stored content and no exception detail, in Development and in Production alike. Any request that reads an unreadable row fails as a whole, which for a list means the entire page, so the affected row has to be repaired or removed.
@@ -213,7 +215,7 @@ List endpoints accept optional `?page=&pageSize=` (pageSize defaults to 10 when 
 - `Microsoft.*` logging is pinned to Warning because EF Core logs SQL statements with parameter values at Information level
 - Data persists in SQL Server; the Docker volume `sqldata` keeps it across container restarts
 - CV files are stored in the database as encrypted `varbinary` (AES-256-GCM); uploads are capped at 20 MB and file names at 255 characters by `Validation/CvLimits`, enforced both in the request pipeline and in the service
-- Encrypted string columns are `nvarchar(max)` holding base64, which costs about 2.7 times the raw ciphertext bytes (4/3 for base64, then 2 bytes per character) and cannot be indexed in SQL Server. `CVFile` is `varbinary(max)` and costs 28 bytes over the original.
+- Encrypted string columns are `nvarchar(max)` holding base64, which costs about 2.7 times the raw ciphertext bytes (4/3 for base64, then 2 bytes per character) and cannot be indexed in SQL Server. `CVFile` is `varbinary(max)` and costs 29 bytes over the original. Because ciphertext length tracks plaintext length exactly, field lengths and CV sizes are visible to anyone who can read the table
 - `GET /health` reports Healthy while the app can reach SQL Server
 - The database starts empty; degrees are created through the UI or API
 - The frontend includes proper error handling and user feedback

@@ -26,31 +26,14 @@ internal class ApplicationDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        var encryptedString = new ValueConverter<string, string>(
-            v => _encryptor.EncryptString(v),
-            v => _encryptor.DecryptString(v));
-
-        // EF never passes nulls to converters; the nullable variants exist to satisfy type checking.
-        var encryptedNullableString = new ValueConverter<string?, string?>(
-            v => v == null ? v : _encryptor.EncryptString(v),
-            v => v == null ? v : _encryptor.DecryptString(v));
-
-        var encryptedBytes = new ValueConverter<byte[], byte[]>(
-            v => _encryptor.EncryptBytes(v),
-            v => _encryptor.DecryptBytes(v));
-
-        var encryptedNullableBytes = new ValueConverter<byte[]?, byte[]?>(
-            v => v == null ? v : _encryptor.EncryptBytes(v),
-            v => v == null ? v : _encryptor.DecryptBytes(v));
-
         modelBuilder.Entity<Candidate>(entity =>
         {
-            entity.Property(c => c.FirstName).IsRequired().HasConversion(encryptedString);
-            entity.Property(c => c.LastName).IsRequired().HasConversion(encryptedString);
-            entity.Property(c => c.Email).IsRequired().HasConversion(encryptedString);
-            entity.Property(c => c.Mobile).HasConversion(encryptedNullableString);
-            entity.Property(c => c.CVFileName).HasConversion(encryptedNullableString);
-            entity.Property(c => c.CVFile).HasConversion(encryptedNullableBytes);
+            entity.Property(c => c.FirstName).IsRequired().HasConversion(RequiredString("Candidate.FirstName"));
+            entity.Property(c => c.LastName).IsRequired().HasConversion(RequiredString("Candidate.LastName"));
+            entity.Property(c => c.Email).IsRequired().HasConversion(RequiredString("Candidate.Email"));
+            entity.Property(c => c.Mobile).HasConversion(OptionalString("Candidate.Mobile"));
+            entity.Property(c => c.CVFileName).HasConversion(OptionalString("Candidate.CVFileName"));
+            entity.Property(c => c.CVFile).HasConversion(OptionalBytes("Candidate.CVFile"));
 
             // Derived from the name fields, so it is never stored.
             entity.Ignore(c => c.FullName);
@@ -67,4 +50,20 @@ internal class ApplicationDbContext : DbContext
             entity.HasIndex(d => d.Name).IsUnique();
         });
     }
+
+    // EF never passes nulls to converters; the null tests below exist to satisfy type checking.
+    private ValueConverter<string, string> RequiredString(string column)
+        => new(
+            v => _encryptor.EncryptString(v, column),
+            v => _encryptor.DecryptString(v, column));
+
+    private ValueConverter<string?, string?> OptionalString(string column)
+        => new(
+            v => v == null ? v : _encryptor.EncryptString(v, column),
+            v => v == null ? v : _encryptor.DecryptString(v, column));
+
+    private ValueConverter<byte[]?, byte[]?> OptionalBytes(string column)
+        => new(
+            v => v == null ? v : _encryptor.EncryptBytes(v, column),
+            v => v == null ? v : _encryptor.DecryptBytes(v, column));
 }

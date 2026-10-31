@@ -87,7 +87,9 @@ try
             policy.WithOrigins(allowedOrigins)
                   .AllowAnyHeader()
                   .AllowAnyMethod()
-                  .AllowCredentials();
+                  .AllowCredentials()
+                  // Custom response headers are invisible to cross-origin scripts unless they are exposed.
+                  .WithExposedHeaders("X-Total-Count");
         });
     });
 

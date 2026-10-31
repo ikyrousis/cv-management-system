@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using CVManagement.DTOs;
 using Xunit;
 
@@ -261,8 +263,8 @@ public sealed class CandidateDegreeLifecycleTests
             Convert.FromBase64String(storedName);
         }
 
-        // nonce(12) + tag(16) + ciphertext(len): the column is larger than the original and shares no prefix.
-        Assert.Equal(28 + original.Length, stored.Length);
+        // marker(1) + nonce(12) + tag(16) + ciphertext(len): the column is larger than the original and shares no prefix.
+        Assert.Equal(29 + original.Length, stored.Length);
         Assert.False(original.AsSpan().SequenceEqual(stored.AsSpan(0, original.Length)));
 
         var download = await client.GetAsync($"/api/candidates/{created.Id}/cv");
@@ -392,13 +394,82 @@ public sealed class CandidateDegreeLifecycleTests
         await client.DeleteAsync($"/api/candidates/{created.Id}");
     }
 
-    private async Task ExecuteAsync(string sql, int id)
+    [Fact]
+    public async Task CiphertextCopiedBetweenColumns_IsRejectedOnRead()
+    {
+        var client = _fixture.Factory.CreateClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/candidates", new
+        {
+            firstName = "Bind",
+            lastName = "Probe",
+            email = $"bind-{Guid.NewGuid():N}@example.com"
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<CandidatePayload>();
+
+        // Each value is authenticated against the column it was written to, so a copy into another column
+        // does not verify even though the key and the payload are untouched.
+        await ExecuteAsync("UPDATE Candidates SET FirstName = Email WHERE Id = @id", created!.Id);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, (await client.GetAsync($"/api/candidates/{created.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, (await client.GetAsync("/api/candidates")).StatusCode);
+
+        await client.DeleteAsync($"/api/candidates/{created.Id}");
+    }
+
+    [Fact]
+    public async Task UnversionedPayloadWrittenBeforeVersioning_IsStillServedThroughTheApi()
+    {
+        var client = _fixture.Factory.CreateClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/candidates", new
+        {
+            firstName = "Legacy",
+            lastName = "Reader",
+            email = "placeholder@example.com"
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<CandidatePayload>();
+
+        // The unversioned layout: nonce | tag | ciphertext, no marker and no authenticated context.
+        var email = $"legacy-{Guid.NewGuid():N}@example.com";
+        var plaintext = Encoding.UTF8.GetBytes(email);
+        var nonce = RandomNumberGenerator.GetBytes(12);
+        var ciphertext = new byte[plaintext.Length];
+        var tag = new byte[16];
+
+        using (var aes = new AesGcm(_fixture.EncryptionKeyBytes, 16))
+        {
+            aes.Encrypt(nonce, plaintext, ciphertext, tag);
+        }
+
+        var legacy = new byte[nonce.Length + tag.Length + ciphertext.Length];
+        nonce.CopyTo(legacy, 0);
+        tag.CopyTo(legacy, 12);
+        ciphertext.CopyTo(legacy, 28);
+
+        await ExecuteAsync("UPDATE Candidates SET Email = @value WHERE Id = @id", created!.Id, Convert.ToBase64String(legacy));
+
+        var read = await client.GetAsync($"/api/candidates/{created.Id}");
+        read.EnsureSuccessStatusCode();
+
+        Assert.Equal(email, (await read.Content.ReadFromJsonAsync<CandidatePayload>())!.Email);
+
+        await client.DeleteAsync($"/api/candidates/{created.Id}");
+    }
+
+    private async Task ExecuteAsync(string sql, int id, string? value = null)
     {
         using var connection = new Microsoft.Data.SqlClient.SqlConnection(_fixture.ConnectionString);
         await connection.OpenAsync();
         using var command = connection.CreateCommand();
         command.CommandText = sql;
         command.Parameters.AddWithValue("@id", id);
+
+        if (value is not null)
+        {
+            command.Parameters.AddWithValue("@value", value);
+        }
+
         await command.ExecuteNonQueryAsync();
     }
 

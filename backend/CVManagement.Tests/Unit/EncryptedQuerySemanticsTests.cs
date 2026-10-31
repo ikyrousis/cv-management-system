@@ -33,7 +33,7 @@ public sealed class EncryptedQuerySemanticsTests
 
         Assert.True(match.Success, sql);
 
-        Assert.Equal(ProbeEmail, encryptor.DecryptString(match.Groups["value"].Value));
+        Assert.Equal(ProbeEmail, encryptor.DecryptString(match.Groups["value"].Value, "Candidate.Email"));
     }
 
     [Fact]
@@ -48,8 +48,8 @@ public sealed class EncryptedQuerySemanticsTests
         var second = (string)converter.ConvertToProvider(ProbeEmail)!;
 
         Assert.NotEqual(first, second);
-        Assert.Equal(ProbeEmail, encryptor.DecryptString(first));
-        Assert.Equal(ProbeEmail, encryptor.DecryptString(second));
+        Assert.Equal(ProbeEmail, encryptor.DecryptString(first, "Candidate.Email"));
+        Assert.Equal(ProbeEmail, encryptor.DecryptString(second, "Candidate.Email"));
     }
 
     [Fact]

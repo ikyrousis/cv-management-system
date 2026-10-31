@@ -22,7 +22,7 @@ public sealed class EncryptionExceptionHandlerTests
         Exception realFault = null!;
         try
         {
-            encryptor.DecryptString("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+            encryptor.DecryptString("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "Candidate.Email");
         }
         catch (Exception ex)
         {
@@ -51,7 +51,7 @@ public sealed class EncryptionExceptionHandlerTests
         Exception fault = null!;
         try
         {
-            encryptor.DecryptString("!!!not-base64!!!");
+            encryptor.DecryptString("!!!not-base64!!!", "Candidate.Email");
         }
         catch (Exception ex)
         {
