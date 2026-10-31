@@ -1,23 +1,41 @@
 version: 2
 updates:
+  # Version updates are off for package ecosystems: a human decides when to move a dependency
+  # forward. GitHub's security updates are exempt from this limit and still open when an
+  # advisory affects a package here.
   - package-ecosystem: nuget
     directory: /backend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 0
 
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 0
+
+  # Workflow and image bumps stay useful but batched, and only within patch and minor range.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    allow:
+      - update-type: version-update:semver-patch
+      - update-type: version-update:semver-minor
+    groups:
+      actions-updates:
+        patterns:
+          - "*"
 
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
-
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
+    allow:
+      - update-type: version-update:semver-patch
+      - update-type: version-update:semver-minor
+    groups:
+      docker-updates:
+        patterns:
+          - "*"
