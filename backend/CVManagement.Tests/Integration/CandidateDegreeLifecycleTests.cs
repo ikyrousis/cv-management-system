@@ -299,7 +299,122 @@ public sealed class CandidateDegreeLifecycleTests
         await client.DeleteAsync($"/api/candidates/{created.Id}");
     }
 
+    [Fact]
+    public async Task UnreadablePersonalFields_RowIsStillDeletable()
+    {
+        var client = _fixture.Factory.CreateClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/candidates", new
+        {
+            firstName = "Unreadable",
+            lastName = "Deletable",
+            email = $"unreadable-{Guid.NewGuid():N}@example.com"
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<CandidatePayload>();
+
+        await ExecuteAsync("UPDATE Candidates SET Email = N'not-ciphertext' WHERE Id = @id", created!.Id);
+
+        // The row really is unreadable through the normal read path.
+        Assert.Equal(HttpStatusCode.InternalServerError, (await client.GetAsync($"/api/candidates/{created.Id}")).StatusCode);
+
+        var deleteResponse = await client.DeleteAsync($"/api/candidates/{created.Id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+        Assert.Equal(0, await CountAsync("SELECT COUNT(*) FROM Candidates WHERE Id = @id", created.Id));
+    }
+
+    [Fact]
+    public async Task UnreadableCvFileName_CvIsStillClearable()
+    {
+        var client = _fixture.Factory.CreateClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/candidates", new
+        {
+            firstName = "Cv",
+            lastName = "Clearable",
+            email = $"cv-clear-{Guid.NewGuid():N}@example.com"
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<CandidatePayload>();
+
+        using (var form = new MultipartFormDataContent
+        {
+            {
+                new ByteArrayContent(new byte[] { 0x25, 0x50, 0x44, 0x46 })
+                {
+                    Headers = { ContentType = new MediaTypeHeaderValue("application/pdf") }
+                },
+                "file",
+                "stuck.pdf"
+            }
+        })
+        {
+            (await client.PostAsync($"/api/candidates/{created!.Id}/cv", form)).EnsureSuccessStatusCode();
+        }
+
+        await ExecuteAsync("UPDATE Candidates SET CVFileName = N'not-ciphertext' WHERE Id = @id", created.Id);
+
+        var clearResponse = await client.DeleteAsync($"/api/candidates/{created.Id}/cv");
+
+        Assert.Equal(HttpStatusCode.NoContent, clearResponse.StatusCode);
+        Assert.Equal(0, await CountAsync("SELECT COUNT(*) FROM Candidates WHERE Id = @id AND CVFile IS NOT NULL", created.Id));
+
+        // With the CV columns cleared the row is readable again through the ordinary read path.
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/candidates/{created.Id}")).StatusCode);
+
+        await client.DeleteAsync($"/api/candidates/{created.Id}");
+    }
+
+    [Fact]
+    public async Task DecryptFault_AnswersWithAFixedProblemDetailsBodyAndNoStoredContent()
+    {
+        var client = _fixture.Factory.CreateClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/candidates", new
+        {
+            firstName = "Leak",
+            lastName = "Probe",
+            email = $"leak-{Guid.NewGuid():N}@example.com"
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<CandidatePayload>();
+
+        await ExecuteAsync("UPDATE Candidates SET Email = N'not-ciphertext' WHERE Id = @id", created!.Id);
+
+        var response = await client.GetAsync($"/api/candidates/{created.Id}");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Contains("Stored candidate data could not be read", body);
+
+        // The replaced stored value and the candidate's own identity must not travel back to the caller.
+        Assert.DoesNotContain("not-ciphertext", body);
+        Assert.DoesNotContain(created.FirstName, body);
+
+        await client.DeleteAsync($"/api/candidates/{created.Id}");
+    }
+
+    private async Task ExecuteAsync(string sql, int id)
+    {
+        using var connection = new Microsoft.Data.SqlClient.SqlConnection(_fixture.ConnectionString);
+        await connection.OpenAsync();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.Parameters.AddWithValue("@id", id);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task<int> CountAsync(string sql, int id)
+    {
+        using var connection = new Microsoft.Data.SqlClient.SqlConnection(_fixture.ConnectionString);
+        await connection.OpenAsync();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.Parameters.AddWithValue("@id", id);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
     private sealed record DegreePayload(int Id, string Name);
 
     private sealed record CandidatePayload(int Id, string FirstName, string LastName, string Email);
 }
+

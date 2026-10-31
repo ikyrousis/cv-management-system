@@ -1,9 +1,10 @@
 using CVManagement.Abstractions;
 using CVManagement.Data;
+using CVManagement.Extensions;
 using CVManagement.Repositories;
 using CVManagement.Services;
+using CVManagement.Validation;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 // Bootstrap logger covers failures before the host builds, such as a missing connection string.
@@ -13,8 +14,6 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
-    const long CvUploadMaxBytes = 20 * 1024 * 1024;
-
     var builder = WebApplication.CreateBuilder(args);
 
     // Replaces the bootstrap logger with the configured one during host build.
@@ -22,10 +21,14 @@ try
 
     builder.Services.AddControllers();
 
+    // The exception handler middleware requires a problem details service before it can be used without a path.
+    builder.Services.AddProblemDetails();
+    builder.Services.AddExceptionHandler<EncryptionExceptionHandler>();
+
     builder.Services.Configure<FormOptions>(options =>
     {
         // Cap uploads so one request cannot exhaust memory.
-        options.MultipartBodyLengthLimit = CvUploadMaxBytes;
+        options.MultipartBodyLengthLimit = CvLimits.MaxCvBytes;
         options.ValueLengthLimit = int.MaxValue;
         options.KeyLengthLimit = int.MaxValue;
     });
@@ -57,7 +60,7 @@ try
 
     builder.Services.AddSingleton<IEncryptor>(_ => new AesGcmEncryptor(encryptionKeyBytes));
 
-    builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(connectionString));
+    builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseEncryptedSqlServer(connectionString));
 
     builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
     builder.Services.AddScoped<ICandidateRepository, CandidateRepository>();
@@ -94,6 +97,8 @@ try
     var app = builder.Build();
 
     Log.Information("CVManagement API starting in {Environment} environment", app.Environment.EnvironmentName);
+
+    app.UseExceptionHandler();
 
     app.UseSerilogRequestLogging();
 

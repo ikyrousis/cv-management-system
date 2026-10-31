@@ -67,5 +67,19 @@ internal sealed class CandidateRepository : ICandidateRepository
 
     public void Add(Candidate candidate) => _context.Candidates.Add(candidate);
 
-    public void Remove(Candidate candidate) => _context.Candidates.Remove(candidate);
+    // The key alone identifies the row, so no protected column and no CV bytes are read to delete it.
+    public void RemoveById(int id) => _context.Candidates.Remove(new Candidate { Id = id });
+
+    public void DetachCvById(int id)
+    {
+        var stub = new Candidate { Id = id };
+        _context.Candidates.Attach(stub);
+
+        var entry = _context.Entry(stub);
+
+        // Nothing differs from the attached snapshot, so the three CV columns are cleared explicitly.
+        entry.Property(c => c.CVFile).IsModified = true;
+        entry.Property(c => c.CVFileName).IsModified = true;
+        entry.Property(c => c.CVContentType).IsModified = true;
+    }
 }

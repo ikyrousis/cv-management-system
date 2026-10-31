@@ -9,6 +9,9 @@ internal class ApplicationDbContext : DbContext
 {
     private readonly IEncryptor _encryptor;
 
+    /// The instance the converters captured, which is what the model cache key has to follow.
+    internal IEncryptor Encryptor => _encryptor;
+
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, IEncryptor encryptor)
         : base(options)
     {

@@ -21,5 +21,9 @@ public interface ICandidateRepository
 
     void Add(Candidate candidate);
 
-    void Remove(Candidate candidate);
+    /// Deletes from the key alone, so a row whose protected columns cannot be decrypted can still be removed.
+    void RemoveById(int id);
+
+    /// Clears the stored CV from the key alone, without reading the protected columns or the CV bytes.
+    void DetachCvById(int id);
 }

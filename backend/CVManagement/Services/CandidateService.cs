@@ -2,6 +2,7 @@ using CVManagement.Abstractions;
 using CVManagement.DTOs;
 using CVManagement.Entities;
 using CVManagement.Results;
+using CVManagement.Validation;
 
 namespace CVManagement.Services;
 
@@ -97,13 +98,12 @@ public sealed class CandidateService : ICandidateService
 
     public async Task<Result> DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
-        var candidate = await _candidates.FindAsync(id, cancellationToken);
-        if (candidate is null)
+        if (!await _candidates.ExistsAsync(id, cancellationToken))
         {
             return Result.Fail(ServiceFailure.NotFound($"Candidate {id} was not found."));
         }
 
-        _candidates.Remove(candidate);
+        _candidates.RemoveById(id);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
@@ -120,6 +120,22 @@ public sealed class CandidateService : ICandidateService
         if (upload.Content.Length == 0)
         {
             return Result.Fail(ServiceFailure.Validation("No file uploaded"));
+        }
+
+        if (upload.Content.LongLength > CvLimits.MaxCvBytes)
+        {
+            return Result.Fail(ServiceFailure.Validation($"CV exceeds the {CvLimits.MaxCvSizeDescription} limit"));
+        }
+
+        // A stored name is needed to offer the file back, and an empty one breaks the download.
+        if (string.IsNullOrWhiteSpace(upload.FileName))
+        {
+            return Result.Fail(ServiceFailure.Validation("CV file name is required"));
+        }
+
+        if (upload.FileName.Length > CvLimits.MaxCvFileNameChars)
+        {
+            return Result.Fail(ServiceFailure.Validation($"CV file name cannot exceed {CvLimits.MaxCvFileNameChars} characters"));
         }
 
         if (!AllowedCvContentTypes.Contains(upload.ContentType))
@@ -152,16 +168,12 @@ public sealed class CandidateService : ICandidateService
 
     public async Task<Result> DeleteCvAsync(int id, CancellationToken cancellationToken = default)
     {
-        var candidate = await _candidates.FindAsync(id, cancellationToken);
-        if (candidate is null)
+        if (!await _candidates.ExistsAsync(id, cancellationToken))
         {
             return Result.Fail(ServiceFailure.NotFound($"Candidate {id} was not found."));
         }
 
-        candidate.CVFile = null;
-        candidate.CVFileName = null;
-        candidate.CVContentType = null;
-
+        _candidates.DetachCvById(id);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

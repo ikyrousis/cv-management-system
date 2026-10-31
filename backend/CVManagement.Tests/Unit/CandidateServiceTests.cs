@@ -3,6 +3,7 @@ using CVManagement.DTOs;
 using CVManagement.Entities;
 using CVManagement.Results;
 using CVManagement.Services;
+using CVManagement.Validation;
 using NSubstitute;
 using Xunit;
 
@@ -133,6 +134,32 @@ public sealed class CandidateServiceTests
     }
 
     [Fact]
+    public async Task UploadCvAsync_OversizedFile_ReturnsValidationFailureAndSavesNothing()
+    {
+        _candidates.FindAsync(1).Returns(new Candidate { Id = 1 });
+        var upload = new CvUpload(new byte[CvLimits.MaxCvBytes + 1], "big.pdf", "application/pdf");
+
+        var result = await CreateSut().UploadCvAsync(1, upload);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.Validation, result.Failure.Kind);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task UploadCvAsync_AtTheSizeLimit_IsAccepted()
+    {
+        var candidate = new Candidate { Id = 1 };
+        _candidates.FindAsync(1).Returns(candidate);
+        var upload = new CvUpload(new byte[CvLimits.MaxCvBytes], "edge.pdf", "application/pdf");
+
+        var result = await CreateSut().UploadCvAsync(1, upload);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(CvLimits.MaxCvBytes, candidate.CVFile!.LongLength);
+    }
+
+    [Fact]
     public async Task UploadCvAsync_Pdf_StoresFileAndSaves()
     {
         var candidate = new Candidate { Id = 1 };
@@ -173,23 +200,15 @@ public sealed class CandidateServiceTests
     }
 
     [Fact]
-    public async Task DeleteCvAsync_ClearsStoredFileFields()
+    public async Task DeleteCvAsync_ClearsCvWithoutReadingProtectedColumns()
     {
-        var candidate = new Candidate
-        {
-            Id = 1,
-            CVFile = new byte[] { 9 },
-            CVFileName = "cv.pdf",
-            CVContentType = "application/pdf"
-        };
-        _candidates.FindAsync(1).Returns(candidate);
+        _candidates.ExistsAsync(1).Returns(true);
 
         var result = await CreateSut().DeleteCvAsync(1);
 
         Assert.True(result.IsSuccess);
-        Assert.Null(candidate.CVFile);
-        Assert.Null(candidate.CVFileName);
-        Assert.Null(candidate.CVContentType);
+        _candidates.Received(1).DetachCvById(1);
+        _candidates.DidNotReceiveWithAnyArgs().FindAsync(default);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -232,15 +251,42 @@ public sealed class CandidateServiceTests
     }
 
     [Fact]
+    public async Task UploadCvAsync_WithoutAFileName_ReturnsValidationFailure()
+    {
+        _candidates.FindAsync(1).Returns(new Candidate { Id = 1 });
+        var upload = new CvUpload(new byte[] { 1 }, "   ", "application/pdf");
+
+        var result = await CreateSut().UploadCvAsync(1, upload);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.Validation, result.Failure.Kind);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task UploadCvAsync_OverlongFileName_ReturnsValidationFailure()
+    {
+        _candidates.FindAsync(1).Returns(new Candidate { Id = 1 });
+        var upload = new CvUpload(new byte[] { 1 }, new string('c', CvLimits.MaxCvFileNameChars + 1) + ".pdf", "application/pdf");
+
+        var result = await CreateSut().UploadCvAsync(1, upload);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.Validation, result.Failure.Kind);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync();
+    }
+
+    [Fact]
     public async Task DeleteAsync_MissingCandidate_ReturnsNotFound()
     {
-        _candidates.FindAsync(9).Returns((Candidate?)null);
+        _candidates.ExistsAsync(9).Returns(false);
 
         var result = await CreateSut().DeleteAsync(9);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(FailureKind.NotFound, result.Failure.Kind);
-        _candidates.DidNotReceiveWithAnyArgs().Remove(default!);
+        _candidates.DidNotReceiveWithAnyArgs().RemoveById(default);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync();
     }
 
     [Fact]
@@ -270,24 +316,26 @@ public sealed class CandidateServiceTests
     [Fact]
     public async Task DeleteCvAsync_MissingCandidate_ReturnsNotFound()
     {
-        _candidates.FindAsync(2).Returns((Candidate?)null);
+        _candidates.ExistsAsync(2).Returns(false);
 
         var result = await CreateSut().DeleteCvAsync(2);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(FailureKind.NotFound, result.Failure.Kind);
+        _candidates.DidNotReceiveWithAnyArgs().DetachCvById(default);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync();
     }
 
     [Fact]
-    public async Task DeleteAsync_ExistingCandidate_RemovesAndSaves()
+    public async Task DeleteAsync_ExistingCandidate_DeletesByKeyAndSaves()
     {
-        var candidate = new Candidate { Id = 1 };
-        _candidates.FindAsync(1).Returns(candidate);
+        _candidates.ExistsAsync(1).Returns(true);
 
         var result = await CreateSut().DeleteAsync(1);
 
         Assert.True(result.IsSuccess);
-        _candidates.Received(1).Remove(candidate);
+        _candidates.Received(1).RemoveById(1);
+        _candidates.DidNotReceiveWithAnyArgs().FindAsync(default);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }
