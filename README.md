@@ -67,7 +67,7 @@ Frontend tests are deferred: `react-scripts` test ships jest 27, which cannot re
 - `npm audit --omit=dev` as a hard gate on the shipped dependency graph, with the build-time graph reported but non-blocking, because `react-scripts` carries a large transitive tree
 - Gitleaks secret scanning over the repository history
 - CodeQL analysis for C# and JavaScript, which requires Code Security to be enabled for the repository
-- `.github/dependabot.yml` opens update pull requests for NuGet, npm, Docker and GitHub Actions
+- `.github/dependabot.yml` opens security-update pull requests only for NuGet, npm, Docker and GitHub Actions; version updates are deliberate changes
 
 Restore-time auditing is switched on in `CVManagement.csproj` (`NuGetAuditMode=all`), so a newly advisory-flagged transitive package warns during build as well.
 
@@ -125,7 +125,7 @@ cv-management-system/
 ├── docker-compose.yml                   # SQL Server + API + frontend
 ├── .env.example                         # Template for MSSQL_SA_PASSWORD
 ├── .github/workflows/ci.yml             # Build, test, NuGet and npm advisories, secret scan, CodeQL
-├── .github/dependabot.yml               # NuGet, npm, Docker and Actions update PRs
+├── .github/dependabot.yml               # security-update PRs only, version updates are deliberate
 ├── backend/
 │   ├── CVManagement.sln                 # Solution, at the backend root
 │   ├── CVManagement/                    # Single backend project
