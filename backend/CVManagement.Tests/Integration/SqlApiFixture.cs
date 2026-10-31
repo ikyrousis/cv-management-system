@@ -25,8 +25,7 @@ public sealed class SqlApiFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         // No Docker fallback: StartAsync throws when the engine is missing, failing the tests loudly.
-        _sql = new MsSqlBuilder()
-            .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
+        _sql = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
             .Build();
 
         await _sql.StartAsync();
