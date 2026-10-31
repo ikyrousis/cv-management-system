@@ -6,6 +6,7 @@ A simple CV management application built with ASP.NET Core 8.0 and React.
 
 ### Candidates Management
 - Create, read, update, and delete candidates
+- Paged list with a pager, 20 candidates per page, totals from the API
 - Required fields: First Name, Last Name, Email (each trimmed on the way in; names up to 50 characters, email up to 100)
 - Optional fields: Mobile (10-digit validation), Degree selection
 - CV file upload (PDF/Word documents, file name up to 255 characters)
@@ -15,6 +16,7 @@ A simple CV management application built with ASP.NET Core 8.0 and React.
 
 ### Degrees Management
 - Create, read, update, and delete degrees
+- Paged list with a pager, 20 degrees per page, totals from the API
 - Unique degree names validation
 - Cannot delete degrees that are assigned to candidates
 - Cleanup functionality to remove unused degrees
@@ -56,6 +58,18 @@ dotnet test backend/CVManagement.Tests
 Unit tests always run. Integration tests boot the real API against a SQL Server container via Testcontainers and require Docker; without it they fail.
 
 Frontend tests are deferred: `react-scripts` test ships jest 27, which cannot resolve `react-router-dom` v7, and every component imports the router. Revisit by downgrading the router or replacing the CRA toolchain.
+
+### Security gates in CI
+
+`.github/workflows/ci.yml` runs, in addition to build and test:
+
+- `dotnet list package --vulnerable --include-transitive` for both projects, failing on any advisory
+- `npm audit --omit=dev` as a hard gate on the shipped dependency graph, with the build-time graph reported but non-blocking, because `react-scripts` carries a large transitive tree
+- Gitleaks secret scanning over the repository history
+- CodeQL analysis for C# and JavaScript, which requires Code Security to be enabled for the repository
+- `.github/dependabot.yml` opens update pull requests for NuGet, npm, Docker and GitHub Actions
+
+Restore-time auditing is switched on in `CVManagement.csproj` (`NuGetAuditMode=all`), so a newly advisory-flagged transitive package warns during build as well.
 
 ### Frontend on the host (development)
 
@@ -103,14 +117,15 @@ beyond their interfaces, and an architecture test enforces that for controllers.
 | Folder | Tier | Responsibility |
 | --- | --- | --- |
 | `Controllers/`, `Extensions/`, `Program.cs` | Web | Thin controllers, HTTP routing, binding request DTOs, rendering service results as status codes and decrypt faults as sanitized errors, composition root |
-| `DTOs/`, `Entities/`, `Results/`, `Services/`, `Validation/`, `Abstractions/` | Service | Business rules, entities, DTOs, service implementations, and the persistence interfaces they depend on |
+| `DTOs/`, `Entities/`, `Results/`, `Services/`, `Validation/`, `Abstractions/` | Service | Business rules, entities, DTOs, service implementations, the persistence interfaces they depend on, and the shared inbound limits |
 | `Data/`, `Repositories/` | Persistence | EF Core context, repository implementations, unit of work, database initialiser, health check |
 
 ```
 cv-management-system/
 ├── docker-compose.yml                   # SQL Server + API + frontend
 ├── .env.example                         # Template for MSSQL_SA_PASSWORD
-├── .github/workflows/ci.yml             # Build + test backend, build frontend
+├── .github/workflows/ci.yml             # Build, test, NuGet and npm advisories, secret scan, CodeQL
+├── .github/dependabot.yml               # NuGet, npm, Docker and Actions update PRs
 ├── backend/
 │   ├── CVManagement.sln                 # Solution, at the backend root
 │   ├── CVManagement/                    # Single backend project
@@ -123,7 +138,7 @@ cv-management-system/
 │   │   ├── Repositories/                # EF repository implementations, unit of work, projections
 │   │   ├── Results/                     # Result / Result<T> and failure kinds
 │   │   ├── Services/                    # Service interfaces + implementations
-│   │   ├── Validation/                  # Shared input patterns and the CV size limit
+│   │   ├── Validation/                  # Shared input patterns, CV size limits, paging limits
 │   │   ├── Dockerfile
 │   │   └── Program.cs                   # Composition root
 │   └── CVManagement.Tests/              # Unit tests (NSubstitute) + integration tests (Testcontainers)
@@ -144,7 +159,7 @@ the query projections.
 
 ## API Endpoints
 
-List endpoints accept optional `?page=&pageSize=` (pageSize defaults to 10 when paging, max 100; without params the full list is returned). The total count is always sent in the `X-Total-Count` response header, which is exposed to cross-origin scripts through `Access-Control-Expose-Headers`.
+List endpoints page by default: a request without `page` or `pageSize` returns the first 20 records, never the whole table. `pageSize` is capped at 100 (`Validation/PagingLimits`). The full row count is always sent in the `X-Total-Count` response header, which is exposed to the browser through `Access-Control-Expose-Headers`.
 
 ### Candidates
 - `GET /api/candidates` - Get all candidates
@@ -217,6 +232,8 @@ List endpoints accept optional `?page=&pageSize=` (pageSize defaults to 10 when 
 - CV files are stored in the database as encrypted `varbinary` (AES-256-GCM); uploads are capped at 20 MB and file names at 255 characters by `Validation/CvLimits`, enforced both in the request pipeline and in the service
 - Encrypted string columns are `nvarchar(max)` holding base64, which costs about 2.7 times the raw ciphertext bytes (4/3 for base64, then 2 bytes per character) and cannot be indexed in SQL Server. `CVFile` is `varbinary(max)` and costs 29 bytes over the original. Because ciphertext length tracks plaintext length exactly, field lengths and CV sizes are visible to anyone who can read the table
 - `GET /health` reports Healthy while the app can reach SQL Server
+- List responses are bounded by default, so a caller that needs every record pages through it. The degree dropdown in the candidate form does exactly that (`degreesAPI.getAllComplete`) rather than assuming one request returns all options
+- When a stored value cannot be decrypted, the request fails with a fixed 500 and the repository names the offending row by numeric id, in the log and in `UnreadableStoredDataException.Id`. Protected content is never part of that identification
 - The database starts empty; degrees are created through the UI or API
 - The frontend includes proper error handling and user feedback
 - All validation requirements from the assignment are implemented
