@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
+using CVManagement.Abstractions;
 using CVManagement.DTOs;
+using CVManagement.Validation;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace CVManagement.Tests.Integration;
@@ -456,6 +459,84 @@ public sealed class CandidateDegreeLifecycleTests
 
         await client.DeleteAsync($"/api/candidates/{created.Id}");
     }
+
+    [Fact]
+    public async Task ListWithoutParameters_ReturnsOnlyABoundedFirstPage()
+    {
+        var client = _fixture.Factory.CreateClient();
+
+        var baselineTotal = ReadTotal(await client.GetAsync("/api/degrees?pageSize=1"));
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var created = new List<int>();
+        var probeCount = PagingLimits.DefaultPageSize + 1;
+
+        for (var i = 1; i <= probeCount; i++)
+        {
+            var response = await client.PostAsJsonAsync("/api/degrees", new { name = $"Cap {suffix} {i}" });
+            response.EnsureSuccessStatusCode();
+            created.Add((await response.Content.ReadFromJsonAsync<DegreePayload>())!.Id);
+        }
+
+        var unpaged = await client.GetAsync("/api/degrees");
+        unpaged.EnsureSuccessStatusCode();
+        var items = await unpaged.Content.ReadFromJsonAsync<List<DegreePayload>>();
+
+        // Omitting the query string must not hand over the table: the page is capped, the total is not.
+        Assert.Equal(PagingLimits.DefaultPageSize, items!.Count);
+        Assert.Equal(baselineTotal + probeCount, ReadTotal(unpaged));
+
+        foreach (var id in created)
+        {
+            await client.DeleteAsync($"/api/degrees/{id}");
+        }
+    }
+
+    [Fact]
+    public async Task DecryptFault_IdentifiesTheUnreadableRowByIdOnly()
+    {
+        var client = _fixture.Factory.CreateClient();
+
+        var plantedEmail = $"diagnose-{Guid.NewGuid():N}@example.com";
+        var createResponse = await client.PostAsJsonAsync("/api/candidates", new
+        {
+            firstName = "Diagnose",
+            lastName = "Row",
+            email = plantedEmail
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<CandidatePayload>();
+
+        await ExecuteAsync("UPDATE Candidates SET Email = N'not-ciphertext' WHERE Id = @id", created!.Id);
+
+        var listResponse = await client.GetAsync($"/api/candidates?pageSize={PagingLimits.MaxPageSize}");
+        Assert.Equal(HttpStatusCode.InternalServerError, listResponse.StatusCode);
+
+        // A page-level failure names no row, so the repository has to work out which row it was.
+        UnreadableStoredDataException? fault = null;
+        using (var scope = _fixture.Factory.Services.CreateScope())
+        {
+            var repository = scope.ServiceProvider.GetRequiredService<ICandidateRepository>();
+
+            try
+            {
+                await repository.GetAllAsync(1, PagingLimits.MaxPageSize);
+            }
+            catch (UnreadableStoredDataException ex)
+            {
+                fault = ex;
+            }
+        }
+
+        Assert.NotNull(fault);
+        Assert.Equal(created.Id, fault!.Id);
+        Assert.DoesNotContain(plantedEmail, fault.Message);
+        Assert.DoesNotContain("not-ciphertext", fault.Message + fault.ToString());
+
+        await client.DeleteAsync($"/api/candidates/{created.Id}");
+    }
+
+    private static int ReadTotal(HttpResponseMessage response)
+        => int.Parse(response.Headers.GetValues("X-Total-Count").Single());
 
     private async Task ExecuteAsync(string sql, int id, string? value = null)
     {

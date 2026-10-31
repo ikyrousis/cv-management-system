@@ -208,7 +208,7 @@ public sealed class CandidateServiceTests
 
         Assert.True(result.IsSuccess);
         _candidates.Received(1).DetachCvById(1);
-        _candidates.DidNotReceiveWithAnyArgs().FindAsync(default);
+        await _candidates.DidNotReceiveWithAnyArgs().FindAsync(default);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -335,7 +335,7 @@ public sealed class CandidateServiceTests
 
         Assert.True(result.IsSuccess);
         _candidates.Received(1).RemoveById(1);
-        _candidates.DidNotReceiveWithAnyArgs().FindAsync(default);
+        await _candidates.DidNotReceiveWithAnyArgs().FindAsync(default);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

@@ -1,4 +1,5 @@
 using CVManagement.Repositories;
+using CVManagement.Validation;
 using Xunit;
 
 namespace CVManagement.Tests.Unit;
@@ -7,19 +8,25 @@ public sealed class PagingTests
 {
     private static IQueryable<int> Source() => Enumerable.Range(1, 25).AsQueryable();
 
+    private static IQueryable<int> ManyRows() => Enumerable.Range(1, 200).AsQueryable();
+
     [Fact]
-    public void NoParameters_ReturnsEverything()
+    public void NoParameters_ReturnsABoundedFirstPageNotTheWholeTable()
     {
-        Assert.Equal(25, Paging.Apply(Source(), null, null).Count());
+        var page = Paging.Apply(ManyRows(), null, null).ToList();
+
+        Assert.Equal(PagingLimits.DefaultPageSize, page.Count);
+        Assert.Equal(1, page[0]);
+        Assert.NotEqual(200, page.Count);
     }
 
     [Fact]
-    public void PageOnly_DefaultsSizeToTen()
+    public void PageOnly_DefaultsToTheSamePageSize()
     {
-        var page2 = Paging.Apply(Source(), 2, null).ToList();
+        var page2 = Paging.Apply(ManyRows(), 2, null).ToList();
 
-        Assert.Equal(10, page2.Count);
-        Assert.Equal(11, page2[0]);
+        Assert.Equal(PagingLimits.DefaultPageSize, page2.Count);
+        Assert.Equal(PagingLimits.DefaultPageSize + 1, page2[0]);
     }
 
     [Fact]

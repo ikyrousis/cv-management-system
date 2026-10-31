@@ -1,27 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { degreesAPI } from 'services/api';
+import { degreesAPI, readTotal, DEFAULT_PAGE_SIZE } from 'services/api';
+import Pager from 'components/Pager';
 
 function DegreesList() {
   const [degrees, setDegrees] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    fetchDegrees();
-  }, []);
-
-  const fetchDegrees = async () => {
+  const fetchDegrees = useCallback(async (pageToLoad) => {
     try {
       setLoading(true);
-      const response = await degreesAPI.getAll();
+      const response = await degreesAPI.getPage(pageToLoad, pageSize);
       setDegrees(response.data);
+      setTotal(readTotal(response));
+      setError('');
     } catch (err) {
       setError('Failed to fetch degrees');
       console.error('Error fetching degrees:', err);
     } finally {
       setLoading(false);
+    }
+  }, [pageSize]);
+
+  useEffect(() => {
+    fetchDegrees(page);
+  }, [page, fetchDegrees]);
+
+  // Setting the page fires the effect; staying on page 1 needs the fetch called directly.
+  const goOrFetch = (target) => {
+    if (target === page) {
+      fetchDegrees(target);
+    } else {
+      setPage(target);
     }
   };
 
@@ -29,9 +44,9 @@ function DegreesList() {
     if (window.confirm('Are you sure you want to delete this degree?')) {
       try {
         await degreesAPI.delete(id);
-        setDegrees(degrees.filter(d => d.id !== id));
         setSuccess('Degree deleted successfully');
         setTimeout(() => setSuccess(''), 3000);
+        goOrFetch(degrees.length === 1 && page > 1 ? page - 1 : page);
       } catch (err) {
         if (err.response?.status === 400) {
           setError('Cannot delete degree that is assigned to candidates');
@@ -49,7 +64,7 @@ function DegreesList() {
       try {
         const response = await degreesAPI.cleanup();
         setSuccess(response.data.message);
-        fetchDegrees();
+        goOrFetch(1);
         setTimeout(() => setSuccess(''), 5000);
       } catch (err) {
         setError('Failed to cleanup degrees');
@@ -77,7 +92,8 @@ function DegreesList() {
           <button
             className="btn btn-warning"
             onClick={handleCleanup}
-            disabled={degrees.length === 0}
+            disabled={total === 0}
+            title="Removes degrees that no candidate is using, across all pages"
           >
             Cleanup Unused Degrees
           </button>
@@ -99,54 +115,64 @@ function DegreesList() {
         </div>
       )}
 
-      {degrees.length === 0 ? (
+      {total === 0 ? (
         <div className="alert alert-info">
           No degrees found. <Link to="/degrees/new">Add the first degree</Link>.
         </div>
       ) : (
-        <div className="table-responsive">
-          <table className="table table-striped">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Candidates Count</th>
-                <th>Created</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {degrees.map(degree => (
-                <tr key={degree.id}>
-                  <td>{degree.name}</td>
-                  <td>
-                    <span className={`badge ${degree.candidateCount > 0 ? 'bg-primary' : 'bg-secondary'}`}>
-                      {degree.candidateCount}
-                    </span>
-                  </td>
-                  <td>{new Date(degree.creationTime).toLocaleDateString()}</td>
-                  <td>
-                    <div className="btn-group btn-group-sm">
-                      <Link
-                        to={`/degrees/edit/${degree.id}`}
-                        className="btn btn-outline-primary"
-                      >
-                        Edit
-                      </Link>
-                      <button
-                        className="btn btn-outline-danger"
-                        onClick={() => handleDelete(degree.id)}
-                        disabled={degree.candidateCount > 0}
-                        title={degree.candidateCount > 0 ? 'Cannot delete degree with assigned candidates' : 'Delete degree'}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+        <>
+          <div className="table-responsive">
+            <table className="table table-striped">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Candidates Count</th>
+                  <th>Created</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {degrees.map(degree => (
+                  <tr key={degree.id}>
+                    <td>{degree.name}</td>
+                    <td>
+                      <span className={`badge ${degree.candidateCount > 0 ? 'bg-primary' : 'bg-secondary'}`}>
+                        {degree.candidateCount}
+                      </span>
+                    </td>
+                    <td>{new Date(degree.creationTime).toLocaleDateString()}</td>
+                    <td>
+                      <div className="btn-group btn-group-sm">
+                        <Link
+                          to={`/degrees/edit/${degree.id}`}
+                          className="btn btn-outline-primary"
+                        >
+                          Edit
+                        </Link>
+                        <button
+                          className="btn btn-outline-danger"
+                          onClick={() => handleDelete(degree.id)}
+                          disabled={degree.candidateCount > 0}
+                          title={degree.candidateCount > 0 ? 'Cannot delete degree with assigned candidates' : 'Delete degree'}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <Pager
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            singular="degree"
+          />
+        </>
       )}
 
       <div className="mt-4">

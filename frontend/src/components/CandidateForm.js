@@ -22,8 +22,8 @@ function CandidateForm() {
 
   const fetchDegrees = useCallback(async () => {
     try {
-      const response = await degreesAPI.getAll();
-      setDegrees(response.data);
+      const result = await degreesAPI.getAllComplete();
+      setDegrees(result.data);
     } catch (err) {
       setError('Failed to fetch degrees');
       console.error('Error fetching degrees:', err);
@@ -64,6 +64,18 @@ function CandidateForm() {
 
   const handleFileChange = (e) => {
     setCvFile(e.target.files[0]);
+  };
+
+  // Trimming on blur means the browser checks, this form's checks and the API all see the same value.
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+
+    if (typeof value === 'string' && value !== value.trim()) {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value.trim()
+      }));
+    }
   };
 
   const validateForm = () => {
@@ -168,6 +180,7 @@ function CandidateForm() {
                 name="firstName"
                 value={formData.firstName}
                 onChange={handleInputChange}
+                onBlur={handleBlur}
                 required
                 maxLength="50"
               />
@@ -183,6 +196,7 @@ function CandidateForm() {
                 name="lastName"
                 value={formData.lastName}
                 onChange={handleInputChange}
+                onBlur={handleBlur}
                 required
                 maxLength="50"
               />
@@ -199,6 +213,7 @@ function CandidateForm() {
             name="email"
             value={formData.email}
             onChange={handleInputChange}
+            onBlur={handleBlur}
             pattern="[a-zA-Z0-9._\%\+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
             placeholder="example@domain.com"
             required
@@ -216,9 +231,10 @@ function CandidateForm() {
             name="mobile"
             value={formData.mobile}
             onChange={handleInputChange}
+            onBlur={handleBlur}
             pattern="\d{10}"
             placeholder="1234567890"
-            maxLength="10"
+            maxLength="15"
           />
           <div className="form-text">Enter exactly 10 digits (optional)</div>
         </div>

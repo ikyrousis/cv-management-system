@@ -2,6 +2,7 @@ using CVManagement.Extensions;
 using System.ComponentModel.DataAnnotations;
 using CVManagement.DTOs;
 using CVManagement.Services;
+using CVManagement.Validation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CVManagement.Controllers;
@@ -17,7 +18,7 @@ public sealed class CandidatesController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<CandidateDto>>> GetCandidates(
         [FromQuery][Range(1, int.MaxValue)] int? page,
-        [FromQuery][Range(1, 100)] int? pageSize,
+        [FromQuery][Range(1, PagingLimits.MaxPageSize)] int? pageSize,
         CancellationToken cancellationToken)
     {
         var result = await _candidates.GetAllAsync(page, pageSize, cancellationToken);

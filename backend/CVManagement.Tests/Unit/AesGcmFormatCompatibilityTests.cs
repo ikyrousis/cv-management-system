@@ -91,12 +91,13 @@ public sealed class AesGcmFormatCompatibilityTests
 
     [Theory]
     [MemberData(nameof(VersionedPayloadVectors))]
-    public void DecryptBytes_VersionedPayloadFromAnotherColumn_IsRejected(string expectedPlaintext, string context, string payloadBase64)
+    public void DecryptBytes_VersionedPayload_VerifiesOnlyForItsOwnColumn(string expectedPlaintext, string context, string payloadBase64)
     {
         var other = context == "Candidate.Email" ? "Candidate.FirstName" : "Candidate.Email";
 
         using var encryptor = new AesGcmEncryptor(Key);
 
+        Assert.Equal(Encoding.UTF8.GetBytes(expectedPlaintext), encryptor.DecryptBytes(Convert.FromBase64String(payloadBase64), context));
         Assert.ThrowsAny<CryptographicException>(() => encryptor.DecryptBytes(Convert.FromBase64String(payloadBase64), other));
     }
 

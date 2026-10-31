@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using CVManagement.Abstractions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,16 +21,28 @@ public sealed class EncryptionExceptionHandler : IExceptionHandler
         Exception exception,
         CancellationToken cancellationToken)
     {
-        if (!IsUnreadableDataFault(exception))
+        if (!TryClassify(exception, out var rowId))
         {
             return false;
         }
 
-        _logger.LogWarning(
-            exception,
-            "Stored ciphertext could not be decrypted for {Method} {Path}",
-            httpContext.Request.Method,
-            httpContext.Request.Path);
+        if (rowId is null)
+        {
+            _logger.LogWarning(
+                exception,
+                "Stored ciphertext could not be decrypted for {Method} {Path}",
+                httpContext.Request.Method,
+                httpContext.Request.Path);
+        }
+        else
+        {
+            _logger.LogWarning(
+                exception,
+                "Stored ciphertext could not be decrypted for {Method} {Path}, candidate {CandidateId}",
+                httpContext.Request.Method,
+                httpContext.Request.Path,
+                rowId);
+        }
 
         httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
 
@@ -44,11 +57,20 @@ public sealed class EncryptionExceptionHandler : IExceptionHandler
         return true;
     }
 
-    /// The converters sit deep inside materialization, so the underlying fault usually arrives wrapped.
-    private static bool IsUnreadableDataFault(Exception exception)
+    /// The repository names the row when it can, so a wrapped fault is the expected shape. A raw
+    /// decrypt fault is still caught here: nothing about stored content may reach a caller either way.
+    private static bool TryClassify(Exception exception, out int? rowId)
     {
+        rowId = null;
+
         for (Exception? current = exception; current is not null; current = current.InnerException)
         {
+            if (current is UnreadableStoredDataException unreadable)
+            {
+                rowId = unreadable.Id;
+                return true;
+            }
+
             if (current is CryptographicException or FormatException)
             {
                 return true;

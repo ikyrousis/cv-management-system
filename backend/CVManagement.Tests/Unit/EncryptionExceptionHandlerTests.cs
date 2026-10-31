@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CVManagement.Abstractions;
 using CVManagement.Data;
 using CVManagement.Extensions;
 using Microsoft.AspNetCore.Http;
@@ -60,6 +61,17 @@ public sealed class EncryptionExceptionHandlerTests
 
         Assert.True(await Handler.TryHandleAsync(context, fault, CancellationToken.None));
         Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task WrappedUnreadableDataFault_IsHandledAndNamesNoContent()
+    {
+        var fault = new UnreadableStoredDataException("Stored candidate data could not be decrypted.", 42, new CryptographicException("tag mismatch"));
+        var context = NewContext();
+
+        Assert.True(await Handler.TryHandleAsync(context, fault, CancellationToken.None));
+        Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
+        Assert.DoesNotContain("42", ReadBody(context));
     }
 
     [Fact]
