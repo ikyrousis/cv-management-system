@@ -72,6 +72,11 @@ public sealed class RateLimitTests
             new { username = "path-hopper", password = "path-hopper-password" });
         Assert.Equal(HttpStatusCode.TooManyRequests, otherPath.StatusCode);
 
+        // Refresh belongs to the same surface: guessing against it cannot outpace login guessing.
+        var refreshPath = await client.PostAsJsonAsync("/api/auth/refresh",
+            new { refreshToken = "some-credential" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, refreshPath.StatusCode);
+
         // The window is a fixed duration: once it passes, the budget returns.
         await Task.Delay(TimeSpan.FromSeconds(WindowSeconds + 2));
 

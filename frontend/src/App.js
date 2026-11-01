@@ -6,10 +6,11 @@ import CandidateForm from 'components/CandidateForm';
 import DegreesList from 'components/DegreesList';
 import DegreeForm from 'components/DegreeForm';
 import LoginPage from 'components/LoginPage';
-import { hasToken, clearToken } from 'services/api';
+import { hasToken, clearSession, hasStoredRefreshToken, resumeSession, authAPI } from 'services/api';
 import './App.css';
 
-// The token lives in memory, so this check is honest: without one, the API answers 401 for
+// The token lives in memory, and the app attempts one silent refresh on load when a stored
+// credential exists, so this check is honest: without a usable session, the API answers 401 for
 // everything. The guard sends the visitor to the login page instead of letting every page
 // fail the same way.
 function RequireAuth({ children }) {
@@ -21,22 +22,48 @@ function RequireAuth({ children }) {
 }
 
 function App() {
+  // A stored refresh credential means a session may be resumable, so the routes wait for the
+  // one silent refresh instead of bouncing a returning user to the login page.
+  const [authReady, setAuthReady] = React.useState(() => hasToken() || !hasStoredRefreshToken());
+
+  React.useEffect(() => {
+    if (authReady) {
+      return;
+    }
+
+    let cancelled = false;
+
+    resumeSession().finally(() => {
+      if (!cancelled) {
+        setAuthReady(true);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady]);
+
   return (
     <Router>
       <div className="App">
         <Navbar />
 
         <div className="container mt-4">
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/" element={<RequireAuth><Home /></RequireAuth>} />
-            <Route path="/candidates" element={<RequireAuth><CandidatesList /></RequireAuth>} />
-            <Route path="/candidates/new" element={<RequireAuth><CandidateForm /></RequireAuth>} />
-            <Route path="/candidates/edit/:id" element={<RequireAuth><CandidateForm /></RequireAuth>} />
-            <Route path="/degrees" element={<RequireAuth><DegreesList /></RequireAuth>} />
-            <Route path="/degrees/new" element={<RequireAuth><DegreeForm /></RequireAuth>} />
-            <Route path="/degrees/edit/:id" element={<RequireAuth><DegreeForm /></RequireAuth>} />
-          </Routes>
+          {authReady ? (
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/" element={<RequireAuth><Home /></RequireAuth>} />
+              <Route path="/candidates" element={<RequireAuth><CandidatesList /></RequireAuth>} />
+              <Route path="/candidates/new" element={<RequireAuth><CandidateForm /></RequireAuth>} />
+              <Route path="/candidates/edit/:id" element={<RequireAuth><CandidateForm /></RequireAuth>} />
+              <Route path="/degrees" element={<RequireAuth><DegreesList /></RequireAuth>} />
+              <Route path="/degrees/new" element={<RequireAuth><DegreeForm /></RequireAuth>} />
+              <Route path="/degrees/edit/:id" element={<RequireAuth><DegreeForm /></RequireAuth>} />
+            </Routes>
+          ) : (
+            <p className="text-center mt-5">Restoring session...</p>
+          )}
         </div>
       </div>
     </Router>
@@ -47,10 +74,16 @@ function Navbar() {
   const navigate = useNavigate();
   const authenticated = hasToken();
 
-  const handleLogout = () => {
-    // Stateless tokens: the API cannot revoke anything, so logout means the client discards
-    // the token. The token stays valid until it expires, which is the documented tradeoff.
-    clearToken();
+  const handleLogout = async () => {
+    // Logout is a server-side revocation: the API burns the refresh credential, so nothing can
+    // rotate it again and the stored value is discarded here as well.
+    try {
+      await authAPI.logout();
+    } catch {
+      // The session ends locally regardless of whether the API call reached it.
+    }
+
+    clearSession();
     navigate('/login');
   };
 

@@ -14,13 +14,17 @@ namespace CVManagement.Tests.Unit;
 public sealed class AuthServiceTests
 {
     private readonly IUserRepository _users = Substitute.For<IUserRepository>();
+    private readonly IRefreshTokenRepository _refreshTokens = Substitute.For<IRefreshTokenRepository>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ITokenProvider _tokens = Substitute.For<ITokenProvider>();
+    private readonly IRefreshTokenGenerator _refreshGenerator = Substitute.For<IRefreshTokenGenerator>();
     private readonly IPasswordHasher<User> _hasher = Substitute.For<IPasswordHasher<User>>();
+    private readonly TimeProvider _clock = new FixedTimeProvider(new DateTimeOffset(2025, 1, 1, 12, 0, 0, TimeSpan.Zero));
 
-    private AuthService CreateSut() => new(_users, _unitOfWork, _tokens, _hasher);
+    private AuthService CreateSut()
+        => new(_users, _refreshTokens, _unitOfWork, _tokens, _refreshGenerator, _hasher, _clock);
 
-    private static readonly TokenResponse Token = new("token", DateTime.UtcNow.AddHours(1));
+    private static readonly AccessTokenResponse Token = new("token", DateTime.UtcNow.AddHours(1));
 
     private User ActiveUser(string passwordHash) => new()
     {
@@ -76,11 +80,237 @@ public sealed class AuthServiceTests
         _users.GetByUsernameAsync("admin", Arg.Any<CancellationToken>()).Returns(user);
         _hasher.VerifyHashedPassword(user, "hash", "correct-password").Returns(PasswordVerificationResult.Success);
         _tokens.IssueToken(user).Returns(Token);
+        _refreshGenerator.Generate().Returns(RefreshMaterial());
 
         var result = await CreateSut().LoginAsync(new LoginRequest { Username = "admin", Password = "correct-password" });
 
         Assert.True(result.IsSuccess);
         Assert.Equal("token", result.Value!.Token);
+    }
+
+    [Fact]
+    public async Task LoginAsync_StoresARefreshTokenAndReturnsItExactlyOnce()
+    {
+        var user = ActiveUser("hash");
+        _users.GetByUsernameAsync("admin", Arg.Any<CancellationToken>()).Returns(user);
+        _hasher.VerifyHashedPassword(user, "hash", "correct-password").Returns(PasswordVerificationResult.Success);
+        _tokens.IssueToken(user).Returns(Token);
+        var material = RefreshMaterial();
+        _refreshGenerator.Generate().Returns(material);
+
+        var result = await CreateSut().LoginAsync(new LoginRequest { Username = "admin", Password = "correct-password" });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(material.Token, result.Value!.RefreshToken);
+        Assert.Equal(material.ExpiresAtUtc, result.Value!.RefreshExpiresAtUtc);
+
+        // Only the digest may be persisted, bound to the account that just logged in.
+        _refreshTokens.Received(1).Add(Arg.Is<RefreshToken>(t =>
+            t.UserId == user.Id && t.TokenHash == material.TokenHash && t.ExpiresAtUtc == material.ExpiresAtUtc));
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BootstrapAsync_StoresARefreshTokenForTheNewAdministrator()
+    {
+        var material = RefreshMaterial();
+        _refreshGenerator.Generate().Returns(material);
+        _users.AddWhenEmptyAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(true);
+        _hasher.HashPassword(Arg.Any<User>(), "bootstrap-password").Returns("hash");
+        _tokens.IssueToken(Arg.Any<User>()).Returns(Token);
+
+        var result = await CreateSut().BootstrapAsync(
+            new BootstrapRequest { Username = "admin", Password = "bootstrap-password" });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(material.Token, result.Value!.RefreshToken);
+        _refreshTokens.Received(1).Add(Arg.Is<RefreshToken>(t => t.TokenHash == material.TokenHash));
+    }
+
+    private static RefreshTokenMaterial RefreshMaterial()
+        => new("raw-token", "stored-hash", CreatedAtUtc, ExpiresAtUtc);
+
+    private static readonly DateTime CreatedAtUtc = new(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+
+    private static readonly DateTime ExpiresAtUtc = CreatedAtUtc.AddDays(7);
+
+    private RefreshToken StoredToken(int userId = 1, DateTime? revokedAtUtc = null)
+        => new()
+        {
+            Id = 5,
+            UserId = userId,
+            TokenHash = "stored-hash",
+            CreatedAtUtc = CreatedAtUtc,
+            ExpiresAtUtc = ExpiresAtUtc,
+            RevokedAtUtc = revokedAtUtc
+        };
+
+    [Fact]
+    public async Task RefreshAsync_UnknownToken_IsRefusedWithoutContainment()
+    {
+        _refreshGenerator.Hash("unknown-token").Returns("unknown-hash");
+        _refreshTokens.FindByHashAsync("unknown-hash", Arg.Any<CancellationToken>()).Returns((RefreshToken?)null);
+
+        var result = await CreateSut().RefreshAsync(new RefreshRequest { RefreshToken = "unknown-token" });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.Unauthorized, result.Failure.Kind);
+
+        // An unknown token is not evidence of theft: the account's other tokens must survive it.
+        await _refreshTokens.DidNotReceive().RevokeAllForUserAsync(Arg.Any<int>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        _tokens.DidNotReceive().IssueToken(Arg.Any<User>());
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ActiveToken_IsConsumedAndReplacedByANewPair()
+    {
+        var user = ActiveUser("hash");
+        var stored = StoredToken();
+        _refreshGenerator.Hash("raw-token").Returns("stored-hash");
+        _refreshTokens.FindByHashAsync("stored-hash", Arg.Any<CancellationToken>()).Returns(stored);
+        _users.FindAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        var material = RefreshMaterial();
+        _refreshGenerator.Generate().Returns(material);
+        _refreshTokens
+            .TryReplaceAsync("stored-hash", Arg.Any<DateTime>(), Arg.Any<RefreshToken>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        _tokens.IssueToken(user).Returns(Token);
+
+        var result = await CreateSut().RefreshAsync(new RefreshRequest { RefreshToken = "raw-token" });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("token", result.Value!.Token);
+        Assert.Equal(material.Token, result.Value!.RefreshToken);
+
+        // The old credential died in the same committed exchange that stored the new one.
+        await _refreshTokens.Received(1).TryReplaceAsync(
+            "stored-hash",
+            Arg.Any<DateTime>(),
+            Arg.Is<RefreshToken>(t => t.TokenHash == material.TokenHash && t.UserId == user.Id),
+            Arg.Any<CancellationToken>());
+        await _refreshTokens.DidNotReceive().RevokeAllForUserAsync(Arg.Any<int>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RefreshAsync_AlreadyRevokedToken_RevokesTheWholeChain()
+    {
+        var revoked = StoredToken(revokedAtUtc: CreatedAtUtc.AddMinutes(5));
+        _refreshGenerator.Hash("stolen-token").Returns("stored-hash");
+        _refreshTokens.FindByHashAsync("stored-hash", Arg.Any<CancellationToken>()).Returns(revoked);
+
+        var result = await CreateSut().RefreshAsync(new RefreshRequest { RefreshToken = "stolen-token" });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.Unauthorized, result.Failure.Kind);
+
+        // Only the thief can be holding a used token, so the account loses every token it holds.
+        await _refreshTokens.Received(1).RevokeAllForUserAsync(revoked.UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        _tokens.DidNotReceive().IssueToken(Arg.Any<User>());
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ExpiredToken_IsRefusedWithoutContainment()
+    {
+        var expired = new RefreshToken
+        {
+            Id = 6,
+            UserId = 1,
+            TokenHash = "stored-hash",
+            CreatedAtUtc = CreatedAtUtc.AddDays(-10),
+            ExpiresAtUtc = CreatedAtUtc.AddDays(-3)
+        };
+        _refreshGenerator.Hash("old-token").Returns("stored-hash");
+        _refreshTokens.FindByHashAsync("stored-hash", Arg.Any<CancellationToken>()).Returns(expired);
+
+        var result = await CreateSut().RefreshAsync(new RefreshRequest { RefreshToken = "old-token" });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.Unauthorized, result.Failure.Kind);
+
+        // Expiry is abandonment, not theft: the account's other tokens survive it.
+        await _refreshTokens.DidNotReceive().RevokeAllForUserAsync(Arg.Any<int>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        _tokens.DidNotReceive().IssueToken(Arg.Any<User>());
+    }
+
+    [Fact]
+    public async Task RefreshAsync_DeactivatedAccount_IsRefused()
+    {
+        var user = new User { Id = 1, Username = "frozen", Role = AuthLimits.UserRole, IsActive = false };
+        _refreshGenerator.Hash("raw-token").Returns("stored-hash");
+        _refreshTokens.FindByHashAsync("stored-hash", Arg.Any<CancellationToken>()).Returns(StoredToken());
+        _users.FindAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await CreateSut().RefreshAsync(new RefreshRequest { RefreshToken = "raw-token" });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.Unauthorized, result.Failure.Kind);
+
+        // Refused before the exchange: deactivation has already revoked the account's tokens, so
+        // a dead account cannot mint a session or a fresh credential.
+        await _refreshTokens.DidNotReceive().TryReplaceAsync(Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<RefreshToken>(), Arg.Any<CancellationToken>());
+        _tokens.DidNotReceive().IssueToken(Arg.Any<User>());
+    }
+
+    [Fact]
+    public async Task RefreshAsync_AnotherRequestConsumedTheTokenFirst_TriggersContainment()
+    {
+        _refreshGenerator.Hash("raced-token").Returns("stored-hash");
+        _refreshTokens.FindByHashAsync("stored-hash", Arg.Any<CancellationToken>()).Returns(StoredToken());
+        _users.FindAsync(1, Arg.Any<CancellationToken>()).Returns(ActiveUser("hash"));
+        _refreshGenerator.Generate().Returns(RefreshMaterial());
+        // The serialized exchange reports that this call was not the one that consumed the token.
+        _refreshTokens
+            .TryReplaceAsync("stored-hash", Arg.Any<DateTime>(), Arg.Any<RefreshToken>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await CreateSut().RefreshAsync(new RefreshRequest { RefreshToken = "raced-token" });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.Unauthorized, result.Failure.Kind);
+
+        // Two presentations of one token means the credential leaked: kill the chain.
+        await _refreshTokens.Received(1).RevokeAllForUserAsync(1, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        _tokens.DidNotReceive().IssueToken(Arg.Any<User>());
+    }
+
+    [Fact]
+    public async Task RevokeAsync_RevokesThePresentedToken()
+    {
+        _refreshGenerator.Hash("raw-token").Returns("stored-hash");
+
+        var result = await CreateSut().RevokeAsync("raw-token");
+
+        Assert.True(result.IsSuccess);
+        await _refreshTokens.Received(1).TryRevokeByHashAsync("stored-hash", Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RevokeAsync_UnknownToken_SucceedsWithoutContainment()
+    {
+        _refreshGenerator.Hash("bogus-token").Returns("unknown-hash");
+        _refreshTokens.TryRevokeByHashAsync("unknown-hash", Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await CreateSut().RevokeAsync("bogus-token");
+
+        // Logout must not answer with an oracle, and a stray token is not theft evidence.
+        Assert.True(result.IsSuccess);
+        await _refreshTokens.DidNotReceive().RevokeAllForUserAsync(Arg.Any<int>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DeactivateAsync_AlsoRevokesTheAccountsRefreshTokens()
+    {
+        var admin = ActiveUser("hash");
+        _users.FindAsync(1, Arg.Any<CancellationToken>()).Returns(admin);
+        _users.CountActiveInRoleAsync(AuthLimits.AdminRole, Arg.Any<CancellationToken>()).Returns(2);
+
+        var result = await CreateSut().DeactivateAsync(1);
+
+        Assert.True(result.IsSuccess);
+        Assert.False(admin.IsActive);
+
+        // Deactivation must close the refresh path immediately, not just future logins.
+        await _refreshTokens.Received(1).RevokeAllForUserAsync(1, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -92,6 +322,7 @@ public sealed class AuthServiceTests
             .Returns(PasswordVerificationResult.SuccessRehashNeeded);
         _hasher.HashPassword(user, "correct-password").Returns("new-format");
         _tokens.IssueToken(Arg.Any<User>()).Returns(Token);
+        _refreshGenerator.Generate().Returns(RefreshMaterial());
 
         var result = await CreateSut().LoginAsync(new LoginRequest { Username = "admin", Password = "correct-password" });
 
@@ -107,6 +338,7 @@ public sealed class AuthServiceTests
         _users.AddWhenEmptyAsync(Arg.Do<User>(u => created = u), Arg.Any<CancellationToken>()).Returns(true);
         _hasher.HashPassword(Arg.Any<User>(), "bootstrap-password").Returns("hash");
         _tokens.IssueToken(Arg.Any<User>()).Returns(Token);
+        _refreshGenerator.Generate().Returns(RefreshMaterial());
 
         var result = await CreateSut().BootstrapAsync(
             new BootstrapRequest { Username = "admin", Password = "bootstrap-password" });

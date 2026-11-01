@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authAPI, setToken } from 'services/api';
+import { authAPI, setSession } from 'services/api';
 
 function LoginPage() {
   const [username, setUsername] = useState('');
@@ -18,7 +18,7 @@ function LoginPage() {
       // The backend trims the username, so the client sends it trimmed; the password is sent
       // exactly as typed, because spaces are legitimate password characters.
       const response = await authAPI.login(username.trim(), password);
-      setToken(response.data.token);
+      setSession(response.data);
       navigate('/candidates');
     } catch (err) {
       if (err.response?.status === 401) {

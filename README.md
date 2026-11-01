@@ -15,11 +15,12 @@ A simple CV management application built with ASP.NET Core 8.0 and React.
 - Mobile number validation (exactly 10 digits; surrounding whitespace is ignored)
 
 ### Authentication
-- JWT bearer authentication on every endpoint except login, bootstrap and the health check
+- JWT bearer authentication on every endpoint except login, refresh, bootstrap and the health check
 - First-run bootstrap endpoint that creates the only administrator, then closes itself
 - Admin-only account management: create users, list users, deactivate users
 - Login answers unknown user, wrong password and deactivated account identically
-- React frontend: login page, route guard, bearer-token interceptor with 401 auto-redirect, client-side logout
+- Rotating refresh tokens: one silent refresh on app load, single-flight on 401, server-side logout
+- React frontend: login page, route guard, bearer-token interceptor with silent refresh and 401 auto-redirect
 
 ### Degrees Management
 - Create, read, update, and delete degrees
@@ -103,29 +104,49 @@ productized identity provider; the tradeoff and the design decisions are asserte
 - **Login carries no oracle**: unknown user, wrong password and deactivated account all answer with
   the same bare 401; the integration test compares the response bodies (minus the per-request
   traceId) to prove it.
-- **Rate limiting**: login and bootstrap carry a fixed-window throttle, 5 attempts per 15 minutes by
+- **Rate limiting**: login, bootstrap and refresh carry a fixed-window throttle, 5 attempts per 15 minutes by
   default, partitioned by source address so one password guesser exhausts only its own budget, and
   the whole auth surface shares that budget so switching paths or usernames cannot reset it. The
   window and permit count live under `RateLimit` in configuration, and tests hammer the endpoint
-  with a tight window to prove the 429, the reset and the partitioning.
+  with a tight window to prove the 429, the reset and the partitioning. Logout is authenticated,
+  so it does not consume the anonymous guessing budget.
 - **Tokens**: HS256 access tokens, 60-minute lifetime, carrying sub, username and one role claim.
   Incoming tokens must also claim HS256, enforced by an explicit algorithm allow-list, because the
   API accepted HS384 and HS512 tokens signed with its own key until that allow-list existed; the
   test that caught it was written first and confirmed red before the fix.
   The tests exercise the live middleware with tampered payloads (a role-escalation attempt with
   the original signature), signatures from a different key, expired and not-yet-valid tokens,
-  malformed strings, and wrong issuer or audience, and every one is rejected. No refresh tokens
-  yet: a deliberate, documented scope cut for a later change.
+  malformed strings, and wrong issuer or audience, and every one is rejected.
+- **Refresh tokens**: every login, bootstrap and refresh issues a rotating refresh credential
+  alongside the access token: 256 bits of CSPRNG, shown once on the wire, stored only as its
+  SHA-256 hash, so a stolen database file cannot be replayed against the API. Each refresh
+  consumes the presented credential and issues a full new window (default 7 days), so an active
+  session never re-logins; the cap is how long an abandoned device keeps access. Consumption is
+  a single conditional UPDATE committed in one transaction with the successor's insert, so
+  concurrent presentations of one credential produce exactly one session, deterministically.
+- **Replay containment**: presenting an already-used credential is theft-shaped, so it revokes
+  every refresh token the account holds; the legitimate holder and the thief are logged out
+  together. Expiry is deliberately exempt: an expired credential is abandonment, not theft, and
+  causes no collateral damage. Every refresh failure answers with the same bare 401, so the
+  response reveals nothing about which state the credential was in.
+- **Revocation surfaces**: `POST /api/auth/logout` (requires a live access token) burns the
+  presented refresh credential, answering 204 for unknown or already-used tokens as well, so
+  logout carries no oracle. Deactivating a user revokes all their refresh tokens immediately;
+  access tokens already issued stay valid until expiry, which is the stateless guarantee a test
+  pins deliberately.
 - **One role**: Admin gates user management only. Deactivating the last active administrator is
   refused, so the system can never lock itself out of account management.
 - **Key separation**: the encryption key and the token signing key must be different values, and
   startup refuses identical ones, because one leaked key must not break both protections at once.
 - **Known limits, documented rather than hidden**: deactivating a user does not revoke an access
   token already issued to it until that token expires; tokens are stateless, and a test pins that
-  exact behaviour so it can only change deliberately. There is no logout endpoint (logout is a
-  client-side token discard) and no password-change flow; both belong to the same later change as
-  refresh tokens and token revocation. The frontend keeps the access token in memory only, so a
-  page refresh means logging in again; that is the XSS tradeoff until refresh tokens exist.
+  exact behaviour so it can only change deliberately. The refresh path is closed immediately at
+  deactivation and at logout. There is no password-change flow; it belongs to a later change
+  together with shortening the access-token lifetime. The frontend keeps the access token in
+  memory only and the refresh token in localStorage: the refresh token is XSS-readable, a
+  tradeoff that buys sessions surviving a page refresh, bounded by rotation (a stolen token
+  dies on first use), replay containment (replaying it kills the account's whole chain) and
+  server-side revocation.
 
 ### Frontend on the host (development)
 
@@ -140,7 +161,8 @@ With the database only: `docker compose up -d sql`.
 
 ### Backend (ASP.NET Core 8.0)
 - Entity Framework Core with SQL Server (Dockerized)
-- JWT bearer authentication with a hand-rolled user store, no self-registration, one admin role
+- JWT bearer authentication with a hand-rolled user store, no self-registration, one admin role,
+  rotating refresh tokens with replay containment and server-side revocation
 - Proper validation on all required fields
 - Email validation
 - Mobile number validation (10 digits)
@@ -152,6 +174,7 @@ With the database only: `docker compose up -d sql`.
 ### Database Schema
 - Candidates table with all required fields
 - Degrees table with required fields
+- Users table for the account store, plus a RefreshTokens table holding only SHA-256 digests
 - Proper relationships between tables
 - Auto-generated IDs
 - CreationTime with default values

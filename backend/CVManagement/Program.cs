@@ -108,6 +108,12 @@ try
             "CvAuth:Issuer and CvAuth:Audience must be configured so tokens cannot be replayed across systems.");
     }
 
+    if (authOptions.RefreshTokenLifetimeDays < 1)
+    {
+        throw new InvalidOperationException(
+            "CvAuth:RefreshTokenLifetimeDays must be at least 1, so every issued credential is usable.");
+    }
+
     var rateLimits = new RateLimitOptions();
     builder.Configuration.GetSection(RateLimitOptions.SectionName).Bind(rateLimits);
 
@@ -123,6 +129,7 @@ try
     builder.Services.AddScoped<ICandidateRepository, CandidateRepository>();
     builder.Services.AddScoped<IDegreeRepository, DegreeRepository>();
     builder.Services.AddScoped<IUserRepository, UserRepository>();
+    builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
     builder.Services.AddScoped<ICandidateService, CandidateService>();
     builder.Services.AddScoped<IDegreeService, DegreeService>();
@@ -135,6 +142,7 @@ try
 
     builder.Services.AddSingleton(TimeProvider.System);
     builder.Services.AddScoped<ITokenProvider, JwtTokenProvider>();
+    builder.Services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
     builder.Services.AddScoped<IAuthService, AuthService>();
 
     builder.Services
@@ -158,9 +166,9 @@ try
 
     builder.Services.AddAuthorization();
 
-    // Login and bootstrap are the endpoints an unauthenticated stranger can hammer, so they carry
-    // the only throttling policy. Partitioned by source address: one machine guessing passwords
-    // exhausts its own budget, not everyone else's.
+    // Login, bootstrap and refresh are the endpoints an unauthenticated stranger can hammer, so
+    // they carry the only throttling policy. Partitioned by source address: one machine guessing
+    // passwords exhausts its own budget, not everyone else's.
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;

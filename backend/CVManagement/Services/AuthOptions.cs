@@ -18,5 +18,8 @@ public sealed class AuthOptions
 
     public int AccessTokenLifetimeMinutes { get; set; } = AuthLimits.DefaultAccessTokenLifetimeMinutes;
 
+    /// Days a refresh credential stays usable. Each use issues a full new window.
+    public int RefreshTokenLifetimeDays { get; set; } = AuthLimits.DefaultRefreshTokenLifetimeDays;
+
     public byte[] SigningKeyBytes => Convert.FromBase64String(SigningKey);
 }
