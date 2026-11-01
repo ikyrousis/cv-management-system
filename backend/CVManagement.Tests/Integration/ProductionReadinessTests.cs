@@ -116,6 +116,27 @@ public sealed class ProductionReadinessTests
         }
     }
 
+    [Fact]
+    public void Startup_WithTheSameKeyForBothPurposes_Fails()
+    {
+        var previousSigningKey = Environment.GetEnvironmentVariable("CvAuth__SigningKey");
+        var encryptionKey = Environment.GetEnvironmentVariable("CvEncryption__Key");
+
+        Environment.SetEnvironmentVariable("CvAuth__SigningKey", encryptionKey);
+
+        try
+        {
+            var failure = AttemptStartup();
+
+            Assert.NotNull(failure);
+            Assert.Contains("must differ", failure!.ToString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CvAuth__SigningKey", previousSigningKey);
+        }
+    }
+
     private static Exception? AttemptStartup()
     {
         try

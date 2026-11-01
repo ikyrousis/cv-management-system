@@ -295,6 +295,59 @@ public sealed class AuthenticationTests
         Assert.Equal(HttpStatusCode.OK, stillValid.StatusCode);
     }
 
+    [Fact]
+    public async Task Bootstrap_SimultaneousRequests_CreateExactlyOneAccount()
+    {
+        // Reopen bootstrap by emptying the Users table, then race eight distinct accounts against
+        // the guard. Distinct usernames matter: identical ones would let the unique index win
+        // instead of the guard, and this test exists to prove the guard.
+        await ExecuteAsync("DELETE FROM Users");
+
+        var client = _fixture.Factory.CreateClient();
+
+        var responses = await Task.WhenAll(Enumerable.Range(1, 8).Select(i => client.PostAsJsonAsync(
+            "/api/auth/bootstrap",
+            new { username = $"racer-{i}", password = "racing-password-1" })));
+
+        var created = responses.Count(r => r.StatusCode == HttpStatusCode.Created);
+
+        Assert.Equal(1, created);
+        Assert.Equal(7, responses.Length - created);
+        Assert.All(responses.Where(r => r.StatusCode != HttpStatusCode.Created),
+            r => Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode));
+
+        // Exactly one account exists afterwards.
+        Assert.Equal(1, await CountUsersAsync());
+
+        // The winner is a racer, so restore the admin the rest of the suite logs in with.
+        await ExecuteAsync("DELETE FROM Users");
+        var restored = await client.PostAsJsonAsync("/api/auth/bootstrap",
+            new { username = "admin", password = SqlApiFixture.AdminPassword });
+        Assert.Equal(HttpStatusCode.Created, restored.StatusCode);
+    }
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new Microsoft.Data.SqlClient.SqlConnection(_fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task<int> CountUsersAsync()
+    {
+        await using var connection = new Microsoft.Data.SqlClient.SqlConnection(_fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM Users";
+
+        return (int)(await command.ExecuteScalarAsync())!;
+    }
+
     /// Reads the raw PasswordHash column as stored, bypassing the API, to prove what is at rest.
     [Fact]
     public async Task TokenWithAnUnsupportedAlgorithm_IsRejected()

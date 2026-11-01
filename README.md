@@ -96,8 +96,9 @@ productized identity provider; the tradeoff and the design decisions are asserte
 - **No self-registration**: accounts are created by an administrator only. The first account arrives
   through `POST /api/auth/bootstrap`, which exists only while the Users table is empty and refuses
   afterwards; the guard is a transaction holding a lock over the count, so two simultaneous
-  bootstraps cannot both succeed. Integration tests prove the closure and that startup fails loudly
-  when the signing key is missing.
+  bootstraps cannot both succeed. Integration tests prove the closure, that startup fails loudly
+  when the signing key is missing, and that eight genuinely concurrent bootstraps still produce
+  exactly one account.
 - **Login carries no oracle**: unknown user, wrong password and deactivated account all answer with
   the same bare 401; the integration test compares the response bodies (minus the per-request
   traceId) to prove it.
@@ -111,6 +112,8 @@ productized identity provider; the tradeoff and the design decisions are asserte
   yet: a deliberate, documented scope cut for a later change.
 - **One role**: Admin gates user management only. Deactivating the last active administrator is
   refused, so the system can never lock itself out of account management.
+- **Key separation**: the encryption key and the token signing key must be different values, and
+  startup refuses identical ones, because one leaked key must not break both protections at once.
 - **Known limits, documented rather than hidden**: deactivating a user does not revoke an access
   token already issued to it until that token expires; tokens are stateless, and a test pins that
   exact behaviour so it can only change deliberately. There is no logout endpoint (logout is a

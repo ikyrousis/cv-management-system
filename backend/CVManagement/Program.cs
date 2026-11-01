@@ -92,6 +92,14 @@ try
         throw new InvalidOperationException("CvAuth:SigningKey must be at least 32 bytes for HS256.");
     }
 
+    if (signingKeyBytes.SequenceEqual(encryptionKeyBytes))
+    {
+        throw new InvalidOperationException(
+            "CvAuth:SigningKey must differ from CvEncryption:Key. Sharing one value would let anyone " +
+            "who can decrypt stored data also forge authentication tokens.");
+    }
+
+
     if (string.IsNullOrWhiteSpace(authOptions.Issuer) || string.IsNullOrWhiteSpace(authOptions.Audience))
     {
         throw new InvalidOperationException(
