@@ -13,6 +13,8 @@ public sealed class SqlApiFixture : IAsyncLifetime
     private const string ConnectionStringKey = "ConnectionStrings__CVManagement";
     private const string EncryptionKey = "CvEncryption__Key";
     private const string SigningKey = "CvAuth__SigningKey";
+    private const string AuthPermitLimitKey = "RateLimit__AuthPermitLimit";
+    private const string AuthWindowSecondsKey = "RateLimit__AuthWindowSeconds";
 
     /// Strong enough for the password rules; constant so every test can log the admin in.
     public const string AdminPassword = "integration-admin-password";
@@ -48,6 +50,10 @@ public sealed class SqlApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(EncryptionKey, Convert.ToBase64String(EncryptionKeyBytes));
         AuthSigningKeyBytes = RandomNumberGenerator.GetBytes(64);
         Environment.SetEnvironmentVariable(SigningKey, Convert.ToBase64String(AuthSigningKeyBytes));
+        // The suite performs many logins from one address, so the main factory runs with the
+        // throttle wide open; the rate-limit tests build their own factory with a tight window.
+        Environment.SetEnvironmentVariable(AuthPermitLimitKey, "10000");
+        Environment.SetEnvironmentVariable(AuthWindowSecondsKey, "60");
 
         Factory = new ApiFactory();
 
@@ -75,6 +81,8 @@ public sealed class SqlApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(ConnectionStringKey, null);
         Environment.SetEnvironmentVariable(EncryptionKey, null);
         Environment.SetEnvironmentVariable(SigningKey, null);
+        Environment.SetEnvironmentVariable(AuthPermitLimitKey, null);
+        Environment.SetEnvironmentVariable(AuthWindowSecondsKey, null);
     }
 
     /// A client authenticated as the bootstrapped admin; the standard client for every test.

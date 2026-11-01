@@ -103,6 +103,11 @@ productized identity provider; the tradeoff and the design decisions are asserte
 - **Login carries no oracle**: unknown user, wrong password and deactivated account all answer with
   the same bare 401; the integration test compares the response bodies (minus the per-request
   traceId) to prove it.
+- **Rate limiting**: login and bootstrap carry a fixed-window throttle, 5 attempts per 15 minutes by
+  default, partitioned by source address so one password guesser exhausts only its own budget, and
+  the whole auth surface shares that budget so switching paths or usernames cannot reset it. The
+  window and permit count live under `RateLimit` in configuration, and tests hammer the endpoint
+  with a tight window to prove the 429, the reset and the partitioning.
 - **Tokens**: HS256 access tokens, 60-minute lifetime, carrying sub, username and one role claim.
   Incoming tokens must also claim HS256, enforced by an explicit algorithm allow-list, because the
   API accepted HS384 and HS512 tokens signed with its own key until that allow-list existed; the
