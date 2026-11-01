@@ -14,17 +14,28 @@ const api = axios.create({
   },
 });
 
-// The access token lives in memory only. Nothing writes it to localStorage or a cookie, so a
-// page refresh ends the session and the user logs in again: the deliberate XSS tradeoff until
-// the API grows refresh tokens.
+// The access token lives in memory only, so it is out of reach for XSS. The refresh token sits in
+// localStorage, which is XSS-readable: that tradeoff buys the session surviving a page refresh,
+// and it is bounded by the API's rotation and replay containment (a stolen token dies on first
+// use, and replaying it kills the account's whole chain) plus server-side revocation at logout.
 let accessToken = null;
 
-export const setToken = (token) => {
+let refreshInFlight = null;
+
+const REFRESH_STORAGE_KEY = 'cv-management-refresh-token';
+
+const readStoredRefreshToken = () => window.localStorage.getItem(REFRESH_STORAGE_KEY);
+
+export const hasStoredRefreshToken = () => Boolean(readStoredRefreshToken());
+
+export const setSession = ({ token, refreshToken }) => {
   accessToken = token;
+  window.localStorage.setItem(REFRESH_STORAGE_KEY, refreshToken);
 };
 
-export const clearToken = () => {
+export const clearSession = () => {
   accessToken = null;
+  window.localStorage.removeItem(REFRESH_STORAGE_KEY);
 };
 
 export const hasToken = () => Boolean(accessToken);
@@ -38,17 +49,69 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// A 401 from a protected endpoint means the session is gone: expired, or the API refuses it.
-// The token is discarded and the user lands on the login page. The login endpoint itself is
-// excluded, otherwise wrong credentials would bounce the user off the page that reports them.
+const requestRefresh = async () => {
+  const stored = readStoredRefreshToken();
+  if (!stored) {
+    return null;
+  }
+
+  const response = await axios.post('/auth/refresh', { refreshToken: stored });
+  setSession(response.data);
+
+  return response.data;
+};
+
+// Single-flight: the refresh credential is single-use, so parallel refreshes with one token
+// would each consume it and trigger the API's replay containment, logging the user out. Every
+// caller shares one in-flight refresh instead.
+const refreshOnce = () => {
+  if (!refreshInFlight) {
+    refreshInFlight = requestRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+
+  return refreshInFlight;
+};
+
+// Called once on app load: with no access token in memory but a stored refresh credential, the
+// session resumes silently instead of dropping the user on the login page.
+export const resumeSession = async () => {
+  if (hasToken() || !hasStoredRefreshToken()) {
+    return hasToken();
+  }
+
+  try {
+    return Boolean(await refreshOnce());
+  } catch {
+    clearSession();
+    return false;
+  }
+};
+
+// A 401 from a protected endpoint means the access token expired or the API refuses it: the
+// stored refresh credential buys one silent retry before the user lands on the login page. The
+// auth endpoints are excluded, otherwise wrong credentials would bounce the user off the page
+// that reports them.
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status = error.response?.status;
     const url = error.config?.url || '';
 
-    if (status === 401 && !url.includes('/auth/login')) {
-      clearToken();
+    if (status === 401 && !url.includes('/auth/login') && !url.includes('/auth/refresh')) {
+      try {
+        const session = await refreshOnce();
+
+        if (session) {
+          error.config.headers.Authorization = `Bearer ${session.token}`;
+          return api.request(error.config);
+        }
+      } catch {
+        // The refresh itself failed: the session is gone.
+      }
+
+      clearSession();
       window.location.assign('/login');
     }
 
@@ -58,6 +121,14 @@ api.interceptors.response.use(
 
 export const authAPI = {
   login: (username, password) => api.post('/auth/login', { username, password }),
+
+  // Server-side revocation: the API burns the refresh credential so nothing can rotate it again.
+  logout: () => {
+    const stored = readStoredRefreshToken();
+    return stored
+      ? api.post('/auth/logout', { refreshToken: stored })
+      : Promise.resolve({ data: null });
+  },
 };
 
 // The API exposes this header through Access-Control-Expose-Headers.

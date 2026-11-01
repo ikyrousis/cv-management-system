@@ -7,8 +7,8 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace CVManagement.Services;
 
-/// Issues short-lived HS256 tokens carrying the identity and the single role claim. No refresh
-/// tokens yet: the expiry is a documented, deliberate scope cut.
+/// Issues short-lived HS256 tokens carrying the identity and the single role claim. Refresh
+/// credentials are a separate concern with their own generator.
 public sealed class JwtTokenProvider : ITokenProvider
 {
     private readonly AuthOptions _options;
@@ -20,7 +20,7 @@ public sealed class JwtTokenProvider : ITokenProvider
         _clock = clock;
     }
 
-    public TokenResponse IssueToken(User user)
+    public AccessTokenResponse IssueToken(User user)
     {
         var now = _clock.GetUtcNow();
         var expires = now.AddMinutes(_options.AccessTokenLifetimeMinutes);
@@ -43,6 +43,6 @@ public sealed class JwtTokenProvider : ITokenProvider
                 new SymmetricSecurityKey(_options.SigningKeyBytes),
                 SecurityAlgorithms.HmacSha256));
 
-        return new TokenResponse(new JwtSecurityTokenHandler().WriteToken(token), expires.UtcDateTime);
+        return new AccessTokenResponse(new JwtSecurityTokenHandler().WriteToken(token), expires.UtcDateTime);
     }
 }
