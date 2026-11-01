@@ -1,45 +1,82 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import CandidatesList from 'components/CandidatesList';
 import CandidateForm from 'components/CandidateForm';
 import DegreesList from 'components/DegreesList';
 import DegreeForm from 'components/DegreeForm';
+import LoginPage from 'components/LoginPage';
+import { hasToken, clearToken } from 'services/api';
 import './App.css';
+
+// The token lives in memory, so this check is honest: without one, the API answers 401 for
+// everything. The guard sends the visitor to the login page instead of letting every page
+// fail the same way.
+function RequireAuth({ children }) {
+  if (!hasToken()) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
 
 function App() {
   return (
     <Router>
       <div className="App">
-        <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
-          <div className="container">
-            <Link className="navbar-brand" to="/">
-              CV Management System
-            </Link>
-            <div className="navbar-nav">
+        <Navbar />
+
+        <div className="container mt-4">
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/" element={<RequireAuth><Home /></RequireAuth>} />
+            <Route path="/candidates" element={<RequireAuth><CandidatesList /></RequireAuth>} />
+            <Route path="/candidates/new" element={<RequireAuth><CandidateForm /></RequireAuth>} />
+            <Route path="/candidates/edit/:id" element={<RequireAuth><CandidateForm /></RequireAuth>} />
+            <Route path="/degrees" element={<RequireAuth><DegreesList /></RequireAuth>} />
+            <Route path="/degrees/new" element={<RequireAuth><DegreeForm /></RequireAuth>} />
+            <Route path="/degrees/edit/:id" element={<RequireAuth><DegreeForm /></RequireAuth>} />
+          </Routes>
+        </div>
+      </div>
+    </Router>
+  );
+}
+
+function Navbar() {
+  const navigate = useNavigate();
+  const authenticated = hasToken();
+
+  const handleLogout = () => {
+    // Stateless tokens: the API cannot revoke anything, so logout means the client discards
+    // the token. The token stays valid until it expires, which is the documented tradeoff.
+    clearToken();
+    navigate('/login');
+  };
+
+  return (
+    <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
+      <div className="container">
+        <Link className="navbar-brand" to="/">
+          CV Management System
+        </Link>
+        <div className="navbar-nav">
+          {authenticated && (
+            <>
               <Link className="nav-link" to="/candidates">
                 Candidates
               </Link>
               <Link className="nav-link" to="/degrees">
                 Degrees
               </Link>
-            </div>
-          </div>
-        </nav>
-
-        <div className="container mt-4">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/candidates" element={<CandidatesList />} />
-            <Route path="/candidates/new" element={<CandidateForm />} />
-            <Route path="/candidates/edit/:id" element={<CandidateForm />} />
-            <Route path="/degrees" element={<DegreesList />} />
-            <Route path="/degrees/new" element={<DegreeForm />} />
-            <Route path="/degrees/edit/:id" element={<DegreeForm />} />
-          </Routes>
+              <button type="button" className="btn btn-link nav-link" onClick={handleLogout}>
+                Logout
+              </button>
+            </>
+          )}
         </div>
       </div>
-    </Router>
+    </nav>
   );
 }
 

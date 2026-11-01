@@ -14,6 +14,52 @@ const api = axios.create({
   },
 });
 
+// The access token lives in memory only. Nothing writes it to localStorage or a cookie, so a
+// page refresh ends the session and the user logs in again: the deliberate XSS tradeoff until
+// the API grows refresh tokens.
+let accessToken = null;
+
+export const setToken = (token) => {
+  accessToken = token;
+};
+
+export const clearToken = () => {
+  accessToken = null;
+};
+
+export const hasToken = () => Boolean(accessToken);
+
+// Every request carries the bearer token while a session is open.
+api.interceptors.request.use((config) => {
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  return config;
+});
+
+// A 401 from a protected endpoint means the session is gone: expired, or the API refuses it.
+// The token is discarded and the user lands on the login page. The login endpoint itself is
+// excluded, otherwise wrong credentials would bounce the user off the page that reports them.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+    const url = error.config?.url || '';
+
+    if (status === 401 && !url.includes('/auth/login')) {
+      clearToken();
+      window.location.assign('/login');
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export const authAPI = {
+  login: (username, password) => api.post('/auth/login', { username, password }),
+};
+
 // The API exposes this header through Access-Control-Expose-Headers.
 export const readTotal = (response) => {
   const raw = response.headers['x-total-count'];
