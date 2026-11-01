@@ -3,13 +3,17 @@ namespace CVManagement.Results;
 public enum FailureKind
 {
     NotFound,
-    Validation
+    Validation,
+    Unauthorized
 }
 
 public sealed record ServiceFailure(FailureKind Kind, string Message)
 {
     public static ServiceFailure NotFound(string message) => new(FailureKind.NotFound, message);
+
     public static ServiceFailure Validation(string message) => new(FailureKind.Validation, message);
+
+    public static ServiceFailure Unauthorized(string message) => new(FailureKind.Unauthorized, message);
 }
 
 public sealed class Result

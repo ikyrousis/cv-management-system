@@ -1,10 +1,14 @@
 using CVManagement.Abstractions;
 using CVManagement.Data;
+using CVManagement.Entities;
 using CVManagement.Extensions;
 using CVManagement.Repositories;
 using CVManagement.Services;
 using CVManagement.Validation;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 // Bootstrap logger covers failures before the host builds, such as a missing connection string.
@@ -60,14 +64,77 @@ try
 
     builder.Services.AddSingleton<IEncryptor>(_ => new AesGcmEncryptor(encryptionKeyBytes));
 
+    // The auth configuration follows the same rules as the encryption key: fail fast when it is
+    // missing, because an API that silently boots with no authentication is the worst outcome.
+    var authOptions = new AuthOptions();
+    builder.Configuration.GetSection(AuthOptions.SectionName).Bind(authOptions);
+
+    if (string.IsNullOrWhiteSpace(authOptions.SigningKey))
+    {
+        throw new InvalidOperationException(
+            "Auth signing key 'CvAuth:SigningKey' is not configured. Set it with " +
+            "'dotnet user-secrets set CvAuth:SigningKey <base64>' (Development) or the " +
+            "CvAuth__SigningKey environment variable. Generate one with 'openssl rand -base64 32'.");
+    }
+
+    byte[] signingKeyBytes;
+    try
+    {
+        signingKeyBytes = Convert.FromBase64String(authOptions.SigningKey);
+    }
+    catch (FormatException)
+    {
+        throw new InvalidOperationException("CvAuth:SigningKey must be a base64-encoded key.");
+    }
+
+    if (signingKeyBytes.Length < 32)
+    {
+        throw new InvalidOperationException("CvAuth:SigningKey must be at least 32 bytes for HS256.");
+    }
+
+    if (string.IsNullOrWhiteSpace(authOptions.Issuer) || string.IsNullOrWhiteSpace(authOptions.Audience))
+    {
+        throw new InvalidOperationException(
+            "CvAuth:Issuer and CvAuth:Audience must be configured so tokens cannot be replayed across systems.");
+    }
+
     builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseEncryptedSqlServer(connectionString));
 
     builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
     builder.Services.AddScoped<ICandidateRepository, CandidateRepository>();
     builder.Services.AddScoped<IDegreeRepository, DegreeRepository>();
+    builder.Services.AddScoped<IUserRepository, UserRepository>();
 
     builder.Services.AddScoped<ICandidateService, CandidateService>();
     builder.Services.AddScoped<IDegreeService, DegreeService>();
+
+    builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
+
+    // Explicit work factor: hashing cost is a security decision, not a framework default.
+    builder.Services.Configure<PasswordHasherOptions>(options => options.IterationCount = AuthLimits.Pbkdf2Iterations);
+    builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+
+    builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.AddScoped<ITokenProvider, JwtTokenProvider>();
+    builder.Services.AddScoped<IAuthService, AuthService>();
+
+    builder.Services
+        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options => options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = authOptions.Issuer,
+            ValidateAudience = true,
+            ValidAudience = authOptions.Audience,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(signingKeyBytes),
+            ValidateLifetime = true,
+            // Small skew so slightly unsynchronized clocks do not reject fresh tokens; it is not a
+            // lifetime extension.
+            ClockSkew = TimeSpan.FromMinutes(1)
+        });
+
+    builder.Services.AddAuthorization();
 
     builder.Services.AddScoped<IDatabaseInitialiser, DatabaseInitialiser>();
 
@@ -116,6 +183,8 @@ try
     }
 
     app.UseCors("AllowReactApp");
+
+    app.UseAuthentication();
 
     app.UseAuthorization();
 

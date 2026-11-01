@@ -14,6 +14,12 @@ A simple CV management application built with ASP.NET Core 8.0 and React.
 - Email validation
 - Mobile number validation (exactly 10 digits; surrounding whitespace is ignored)
 
+### Authentication
+- JWT bearer authentication on every endpoint except login, bootstrap and the health check
+- First-run bootstrap endpoint that creates the only administrator, then closes itself
+- Admin-only account management: create users, list users, deactivate users
+- Login answers unknown user, wrong password and deactivated account identically
+
 ### Degrees Management
 - Create, read, update, and delete degrees
 - Paged list with a pager, 20 degrees per page, totals from the API
@@ -42,12 +48,18 @@ Compose mode and host mode both bind ports 5293 and 3000, so they cannot run at 
 Requires no other stack running: `docker compose down` first (see port note above).
 
 1. Start the database: `docker compose up -d sql`
-2. Set the connection string and encryption key once (Development only):
+2. Set the connection string, encryption key and auth signing key once (Development only):
    ```bash
    dotnet user-secrets set "ConnectionStrings:CVManagement" "Server=localhost,1433;Database=CVManagementDB;User Id=sa;Password=<your .env password>;TrustServerCertificate=True"
    dotnet user-secrets set "CvEncryption:Key" "$(openssl rand -base64 32)"
+   dotnet user-secrets set "CvAuth:SigningKey" "$(openssl rand -base64 32)"
    ```
 3. `dotnet run --project backend/CVManagement`
+4. Create the first account while the Users table is empty; the endpoint closes afterwards:
+   ```bash
+   curl -X POST http://localhost:5293/api/auth/bootstrap -H "Content-Type: application/json" \
+        -d '{"username":"admin","password":"change-this-password"}'
+   ```
 
 ### Tests
 
@@ -71,6 +83,38 @@ Frontend tests are deferred: `react-scripts` test ships jest 27, which cannot re
 
 Restore-time auditing is switched on in `CVManagement.csproj` (`NuGetAuditMode=all`), so a newly advisory-flagged transitive package warns during build as well.
 
+## Authentication
+
+Hand-rolled JWT bearer authentication over the app's own user store, chosen deliberately over a
+productized identity provider; the tradeoff and the design decisions are asserted by tests.
+
+- **Hashing**: salted PBKDF2-HMAC-SHA512 via `PasswordHasher<User>`, 210,000 iterations configured
+  explicitly (a security decision, not a framework default). The stored hash is itself encrypted
+  with the same column machinery, so a stolen database file cannot be attacked offline without the
+  encryption key. The username stays plaintext by design: it is the login identifier and the unique
+  index, not personal data, and it must support equality lookup.
+- **No self-registration**: accounts are created by an administrator only. The first account arrives
+  through `POST /api/auth/bootstrap`, which exists only while the Users table is empty and refuses
+  afterwards; the guard is a transaction holding a lock over the count, so two simultaneous
+  bootstraps cannot both succeed. Integration tests prove the closure and that startup fails loudly
+  when the signing key is missing.
+- **Login carries no oracle**: unknown user, wrong password and deactivated account all answer with
+  the same bare 401; the integration test compares the response bodies (minus the per-request
+  traceId) to prove it.
+- **Tokens**: HS256 access tokens, 60-minute lifetime, carrying sub, username and one role claim.
+  The tests exercise the live middleware with tampered payloads (a role-escalation attempt with
+  the original signature), signatures from a different key, expired and not-yet-valid tokens,
+  malformed strings, and wrong issuer or audience, and every one is rejected. No refresh tokens
+  yet: a deliberate, documented scope cut for a later change.
+- **One role**: Admin gates user management only. Deactivating the last active administrator is
+  refused, so the system can never lock itself out of account management.
+- **Known limits, documented rather than hidden**: deactivating a user does not revoke an access
+  token already issued to it until that token expires; tokens are stateless, and a test pins that
+  exact behaviour so it can only change deliberately. There is no logout endpoint (logout is a
+  client-side token discard) and no password-change flow; both belong to the same later change as
+  refresh tokens and token revocation. The frontend has no login flow yet (phase two), so the API
+  now rejects the frontend's anonymous calls by design.
+
 ### Frontend on the host (development)
 
 1. Navigate to the `frontend` directory
@@ -84,6 +128,7 @@ With the database only: `docker compose up -d sql`.
 
 ### Backend (ASP.NET Core 8.0)
 - Entity Framework Core with SQL Server (Dockerized)
+- JWT bearer authentication with a hand-rolled user store, no self-registration, one admin role
 - Proper validation on all required fields
 - Email validation
 - Mobile number validation (10 digits)

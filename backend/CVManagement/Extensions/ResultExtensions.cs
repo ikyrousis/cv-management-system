@@ -22,6 +22,9 @@ public static class ResultExtensions
         => failure.Kind switch
         {
             FailureKind.NotFound => controller.NotFound(),
+            // A bare 401 with no body: every login failure must be byte-identical, so the response
+            // cannot reveal whether the username or the password was wrong, or the account inactive.
+            FailureKind.Unauthorized => controller.Unauthorized(),
             _ => controller.BadRequest(failure.Message)
         };
 
@@ -29,6 +32,7 @@ public static class ResultExtensions
         => failure.Kind switch
         {
             FailureKind.NotFound => controller.NotFound(),
+            FailureKind.Unauthorized => controller.Unauthorized(),
             _ => controller.BadRequest(failure.Message)
         };
 }

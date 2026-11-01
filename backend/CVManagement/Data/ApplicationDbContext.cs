@@ -1,5 +1,6 @@
 using CVManagement.Abstractions;
 using CVManagement.Entities;
+using CVManagement.Validation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
@@ -21,6 +22,8 @@ internal class ApplicationDbContext : DbContext
     public DbSet<Candidate> Candidates => Set<Candidate>();
 
     public DbSet<Degree> Degrees => Set<Degree>();
+
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,6 +51,21 @@ internal class ApplicationDbContext : DbContext
         {
             entity.Property(d => d.Name).IsRequired().HasMaxLength(100);
             entity.HasIndex(d => d.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            // Plaintext by design: the username is the lookup key, so it needs a unique index and
+            // equality search, which randomized encryption cannot provide.
+            entity.Property(u => u.Username).IsRequired().HasMaxLength(AuthLimits.UsernameMaxLength);
+            entity.HasIndex(u => u.Username).IsUnique();
+
+            // The hash is already salted and slow, but encrypting it anyway means a stolen database
+            // file without the key cannot be cracked offline at all.
+            entity.Property(u => u.PasswordHash).IsRequired().HasConversion(RequiredString("User.PasswordHash"));
+
+            entity.Property(u => u.Role).IsRequired().HasMaxLength(20);
+            entity.Property(u => u.IsActive).IsRequired();
         });
     }
 

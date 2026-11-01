@@ -3,12 +3,14 @@ using System.ComponentModel.DataAnnotations;
 using CVManagement.DTOs;
 using CVManagement.Services;
 using CVManagement.Validation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CVManagement.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public sealed class DegreesController : ControllerBase
 {
     private readonly IDegreeService _degrees;

@@ -18,7 +18,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task FullLifecycle_DegreeBlocksWhileAssigned_ThenCleansUp()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var degreeResponse = await client.PostAsJsonAsync("/api/degrees", new { name = "BSc Integration" });
         degreeResponse.EnsureSuccessStatusCode();
@@ -54,7 +54,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task UploadAndDownloadCv_RoundTrips()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var candidateResponse = await client.PostAsJsonAsync("/api/candidates", new
         {
@@ -108,7 +108,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task HealthEndpoint_ReportsHealthy()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var response = await client.GetAsync("/health");
 
@@ -119,7 +119,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task Pagination_SlicesResultsAndReportsTotal()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var created = new List<int>();
@@ -153,7 +153,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task Pagination_BeyondLastPage_ReturnsEmptyWithTotal()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var page = await client.GetAsync("/api/degrees?page=2147483647&pageSize=100");
 
@@ -166,7 +166,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task ConcurrentCreateSameName_ExactlyOneSucceeds()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
         var name = $"Race {Guid.NewGuid().ToString("N")[..12]}";
 
         var responses = await Task.WhenAll(
@@ -185,7 +185,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task SensitiveFields_StoredAsCiphertextServedAsPlaintext()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
         var email = $"probe-{Guid.NewGuid():N}@example.com";
 
         var createResponse = await client.PostAsJsonAsync("/api/candidates", new
@@ -224,7 +224,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task CvBytes_StoredEncryptedAndDecryptedForDownload()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var createResponse = await client.PostAsJsonAsync("/api/candidates", new
         {
@@ -280,7 +280,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task NullOptionalFields_StoredAsNullNotAsEncryptedEmpty()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var createResponse = await client.PostAsJsonAsync("/api/candidates", new
         {
@@ -307,7 +307,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task UnreadablePersonalFields_RowIsStillDeletable()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var createResponse = await client.PostAsJsonAsync("/api/candidates", new
         {
@@ -331,7 +331,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task UnreadableCvFileName_CvIsStillClearable()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var createResponse = await client.PostAsJsonAsync("/api/candidates", new
         {
@@ -372,7 +372,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task DecryptFault_AnswersWithAFixedProblemDetailsBodyAndNoStoredContent()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var createResponse = await client.PostAsJsonAsync("/api/candidates", new
         {
@@ -400,7 +400,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task CiphertextCopiedBetweenColumns_IsRejectedOnRead()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var createResponse = await client.PostAsJsonAsync("/api/candidates", new
         {
@@ -423,7 +423,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task UnversionedPayloadWrittenBeforeVersioning_IsStillServedThroughTheApi()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var createResponse = await client.PostAsJsonAsync("/api/candidates", new
         {
@@ -463,7 +463,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task ListWithoutParameters_ReturnsOnlyABoundedFirstPage()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var baselineTotal = ReadTotal(await client.GetAsync("/api/degrees?pageSize=1"));
 
@@ -495,7 +495,7 @@ public sealed class CandidateDegreeLifecycleTests
     [Fact]
     public async Task DecryptFault_IdentifiesTheUnreadableRowByIdOnly()
     {
-        var client = _fixture.Factory.CreateClient();
+        var client = await _fixture.CreateAuthenticatedClientAsync();
 
         var plantedEmail = $"diagnose-{Guid.NewGuid():N}@example.com";
         var createResponse = await client.PostAsJsonAsync("/api/candidates", new
