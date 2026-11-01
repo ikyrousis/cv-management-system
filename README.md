@@ -19,6 +19,7 @@ A simple CV management application built with ASP.NET Core 8.0 and React.
 - First-run bootstrap endpoint that creates the only administrator, then closes itself
 - Admin-only account management: create users, list users, deactivate users
 - Login answers unknown user, wrong password and deactivated account identically
+- React frontend: login page, route guard, bearer-token interceptor with 401 auto-redirect, client-side logout
 
 ### Degrees Management
 - Create, read, update, and delete degrees
@@ -118,8 +119,8 @@ productized identity provider; the tradeoff and the design decisions are asserte
   token already issued to it until that token expires; tokens are stateless, and a test pins that
   exact behaviour so it can only change deliberately. There is no logout endpoint (logout is a
   client-side token discard) and no password-change flow; both belong to the same later change as
-  refresh tokens and token revocation. The frontend has no login flow yet (phase two), so the API
-  now rejects the frontend's anonymous calls by design.
+  refresh tokens and token revocation. The frontend keeps the access token in memory only, so a
+  page refresh means logging in again; that is the XSS tradeoff until refresh tokens exist.
 
 ### Frontend on the host (development)
 
