@@ -1,13 +1,17 @@
 using CVManagement.Extensions;
 using CVManagement.DTOs;
 using CVManagement.Services;
+using CVManagement.Validation;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CVManagement.Controllers;
 
-/// Anonymous by design: login and first-run bootstrap are the only unauthenticated entry points.
+/// Anonymous by design: login and first-run bootstrap are the only unauthenticated entry points,
+/// which also makes them the only endpoints worth throttling.
 [ApiController]
 [Route("api/[controller]")]
+[EnableRateLimiting(RateLimitPolicy.Auth)]
 public sealed class AuthController : ControllerBase
 {
     private readonly IAuthService _auth;

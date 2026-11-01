@@ -8,8 +8,10 @@ using CVManagement.Validation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
+using System.Threading.RateLimiting;
 
 // Bootstrap logger covers failures before the host builds, such as a missing connection string.
 Log.Logger = new LoggerConfiguration()
@@ -106,6 +108,15 @@ try
             "CvAuth:Issuer and CvAuth:Audience must be configured so tokens cannot be replayed across systems.");
     }
 
+    var rateLimits = new RateLimitOptions();
+    builder.Configuration.GetSection(RateLimitOptions.SectionName).Bind(rateLimits);
+
+    if (rateLimits.AuthPermitLimit < 1 || rateLimits.AuthWindowSeconds < 1)
+    {
+        throw new InvalidOperationException(
+            "RateLimit:AuthPermitLimit and RateLimit:AuthWindowSeconds must both be at least 1.");
+    }
+
     builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseEncryptedSqlServer(connectionString));
 
     builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -146,6 +157,24 @@ try
         });
 
     builder.Services.AddAuthorization();
+
+    // Login and bootstrap are the endpoints an unauthenticated stranger can hammer, so they carry
+    // the only throttling policy. Partitioned by source address: one machine guessing passwords
+    // exhausts its own budget, not everyone else's.
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+        options.AddPolicy(RateLimitPolicy.Auth, context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown-address",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = rateLimits.AuthPermitLimit,
+                    Window = TimeSpan.FromSeconds(rateLimits.AuthWindowSeconds),
+                    QueueLimit = 0
+                }));
+    });
 
     builder.Services.AddScoped<IDatabaseInitialiser, DatabaseInitialiser>();
 
@@ -198,6 +227,8 @@ try
     app.UseAuthentication();
 
     app.UseAuthorization();
+
+    app.UseRateLimiter();
 
     app.MapControllers();
 
