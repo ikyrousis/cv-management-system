@@ -102,6 +102,9 @@ productized identity provider; the tradeoff and the design decisions are asserte
   the same bare 401; the integration test compares the response bodies (minus the per-request
   traceId) to prove it.
 - **Tokens**: HS256 access tokens, 60-minute lifetime, carrying sub, username and one role claim.
+  Incoming tokens must also claim HS256, enforced by an explicit algorithm allow-list, because the
+  API accepted HS384 and HS512 tokens signed with its own key until that allow-list existed; the
+  test that caught it was written first and confirmed red before the fix.
   The tests exercise the live middleware with tampered payloads (a role-escalation attempt with
   the original signature), signatures from a different key, expired and not-yet-valid tokens,
   malformed strings, and wrong issuer or audience, and every one is rejected. No refresh tokens

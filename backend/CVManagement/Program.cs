@@ -128,6 +128,9 @@ try
             ValidAudience = authOptions.Audience,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(signingKeyBytes),
+            // The API only ever issues HS256; anything else in an incoming token header means a
+            // crafted or downgraded token, and the allow-list rejects it.
+            ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 },
             ValidateLifetime = true,
             // Small skew so slightly unsynchronized clocks do not reject fresh tokens; it is not a
             // lifetime extension.

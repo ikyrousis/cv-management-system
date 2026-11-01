@@ -46,7 +46,7 @@ public sealed class SqlApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(ConnectionStringKey, _sql.GetConnectionString());
         EncryptionKeyBytes = RandomNumberGenerator.GetBytes(32);
         Environment.SetEnvironmentVariable(EncryptionKey, Convert.ToBase64String(EncryptionKeyBytes));
-        AuthSigningKeyBytes = RandomNumberGenerator.GetBytes(32);
+        AuthSigningKeyBytes = RandomNumberGenerator.GetBytes(64);
         Environment.SetEnvironmentVariable(SigningKey, Convert.ToBase64String(AuthSigningKeyBytes));
 
         Factory = new ApiFactory();

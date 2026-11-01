@@ -296,6 +296,108 @@ public sealed class AuthenticationTests
     }
 
     /// Reads the raw PasswordHash column as stored, bypassing the API, to prove what is at rest.
+    [Fact]
+    public async Task TokenWithAnUnsupportedAlgorithm_IsRejected()
+    {
+        // HS384/HS512 with the correct key and otherwise valid content. The fixture key is 64 bytes
+        // so these tokens are constructible; before the algorithm allow-list existed, the API
+        // accepted them. The "none" variant is the classic confusion shape: no signature at all.
+        var hs384 = CraftToken(_fixture.AuthSigningKeyBytes, algorithm: SecurityAlgorithms.HmacSha384);
+        var hs512 = CraftToken(_fixture.AuthSigningKeyBytes, algorithm: SecurityAlgorithms.HmacSha512Signature);
+        var unsigned = UnsignedToken();
+
+        foreach (var token in new[] { hs384, hs512, unsigned })
+        {
+            var client = _fixture.Factory.CreateClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/candidates")).StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task ValidlySignedTokens_WithMissingOrInventedRoles_CannotReachTheAdminSurface()
+    {
+        // Correct key, correct issuer and audience, still authenticated on /api/candidates, but the
+        // role claim is absent or invented: authorization must refuse the admin surface with 403.
+        var missingRole = CraftToken(_fixture.AuthSigningKeyBytes, role: null);
+        var inventedRole = CraftToken(_fixture.AuthSigningKeyBytes, role: "Superuser");
+
+        foreach (var token in new[] { missingRole, inventedRole })
+        {
+            var client = _fixture.Factory.CreateClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/candidates")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/users")).StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task UsersList_NeverContainsAnyPasswordHash()
+    {
+        var admin = await _fixture.CreateAuthenticatedClientAsync();
+
+        var list = await admin.GetAsync("/api/users");
+        var body = await list.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        Assert.DoesNotContain("passwordHash", body, StringComparison.OrdinalIgnoreCase);
+
+        // Stronger than a key name check: none of the stored hash values may appear either.
+        var storedHash = await ReadStoredHashAsync("admin");
+        Assert.NotNull(storedHash);
+        Assert.DoesNotContain(storedHash!, body);
+    }
+
+    [Fact]
+    public async Task EveryProtectedEndpoint_RejectsAnonymousRequests()
+    {
+        var client = _fixture.Factory.CreateClient();
+
+        var requests = new[]
+        {
+            client.GetAsync("/api/candidates"),
+            client.GetAsync("/api/candidates/1"),
+            client.GetAsync("/api/candidates/1/cv"),
+            client.PostAsync("/api/candidates", null),
+            client.PutAsync("/api/candidates/1", null),
+            client.DeleteAsync("/api/candidates/1"),
+            client.DeleteAsync("/api/candidates/1/cv"),
+            client.GetAsync("/api/degrees"),
+            client.PostAsync("/api/degrees", null),
+            client.GetAsync("/api/users"),
+            client.PostAsync("/api/users", null),
+            client.PostAsync("/api/users/1/deactivate", null)
+        };
+
+        foreach (var response in await Task.WhenAll(requests))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task Authentication_SetsNoCookiesAnywhere()
+    {
+        // Bearer-only by design: no session cookie means session fixation and CSRF do not apply to
+        // this API, and this pin holds until that decision is consciously changed.
+        var response = await _fixture.Factory.CreateClient().PostAsJsonAsync("/api/auth/login",
+            new { username = "admin", password = SqlApiFixture.AdminPassword });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(response.Headers.Contains("Set-Cookie"), "The API must not set authentication cookies.");
+    }
+
+    /// A token with alg none and an empty signature: the classic algorithm-confusion shape.
+    private static string UnsignedToken()
+    {
+        var header = Base64UrlEncode("{\"alg\":\"none\",\"typ\":\"JWT\"}");
+        var payload = Base64UrlEncode("{\"sub\":\"1\",\"unique_name\":\"someone\",\"role\":\"Admin\"}");
+
+        return $"{header}.{payload}.";
+    }
+
     private async Task<string?> ReadStoredHashAsync(string username)
     {
         await using var connection = new Microsoft.Data.SqlClient.SqlConnection(_fixture.ConnectionString);
@@ -314,24 +416,31 @@ public sealed class AuthenticationTests
         byte[] signingKey,
         string issuer = "cv-management-api",
         string audience = "cv-management-client",
-        string role = AuthLimits.AdminRole,
+        string? role = AuthLimits.AdminRole,
         DateTime? notBefore = null,
-        DateTime? expires = null)
+        DateTime? expires = null,
+        string algorithm = SecurityAlgorithms.HmacSha256)
     {
         var now = DateTime.UtcNow;
+
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, "1"),
+            new(JwtRegisteredClaimNames.UniqueName, "someone")
+        };
+
+        if (role is not null)
+        {
+            claims.Add(new Claim("role", role));
+        }
 
         var token = new JwtSecurityToken(
             issuer: issuer,
             audience: audience,
-            claims: new[]
-            {
-                new Claim(JwtRegisteredClaimNames.Sub, "1"),
-                new Claim(JwtRegisteredClaimNames.UniqueName, "someone"),
-                new Claim("role", role)
-            },
+            claims: claims,
             notBefore: notBefore ?? now.AddMinutes(-5),
             expires: expires ?? now.AddMinutes(55),
-            signingCredentials: new SigningCredentials(new SymmetricSecurityKey(signingKey), SecurityAlgorithms.HmacSha256));
+            signingCredentials: new SigningCredentials(new SymmetricSecurityKey(signingKey), algorithm));
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
