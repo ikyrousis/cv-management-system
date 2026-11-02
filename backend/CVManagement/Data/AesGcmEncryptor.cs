@@ -6,6 +6,10 @@ namespace CVManagement.Data;
 
 /// AES-256-GCM with a random nonce per value.
 ///
+/// One instance serves the whole process, and the runtime's GCM implementations do not tolerate
+/// concurrent calls on a single AesGcm, so every operation holds the lock for its whole call: the
+/// critical section is only the symmetric operation itself.
+///
 /// Versioned payload: marker(1) | nonce(12) | tag(16) | ciphertext, as base64 for strings and raw for bytes.
 /// The context string is additional authenticated data, so a value copied into another column fails to
 /// verify. Values written before versioning are the unmarked layout nonce(12) | tag(16) | ciphertext with
@@ -18,6 +22,7 @@ internal sealed class AesGcmEncryptor : IEncryptor, IDisposable
     private const byte VersionMarker = 0x01;
 
     private readonly AesGcm _aes;
+    private readonly object _gate = new();
 
     public AesGcmEncryptor(byte[] key)
     {
@@ -37,19 +42,22 @@ internal sealed class AesGcmEncryptor : IEncryptor, IDisposable
 
     public byte[] EncryptBytes(byte[] plaintext, string context)
     {
-        var nonce = RandomNumberGenerator.GetBytes(NonceBytes);
-        var ciphertext = new byte[plaintext.Length];
-        var tag = new byte[TagBytes];
+        lock (_gate)
+        {
+            var nonce = RandomNumberGenerator.GetBytes(NonceBytes);
+            var ciphertext = new byte[plaintext.Length];
+            var tag = new byte[TagBytes];
 
-        _aes.Encrypt(nonce, plaintext, ciphertext, tag, AdditionalData(context));
+            _aes.Encrypt(nonce, plaintext, ciphertext, tag, AdditionalData(context));
 
-        var result = new byte[1 + NonceBytes + TagBytes + ciphertext.Length];
-        result[0] = VersionMarker;
-        nonce.CopyTo(result, 1);
-        tag.CopyTo(result.AsSpan(1 + NonceBytes));
-        ciphertext.CopyTo(result.AsSpan(1 + NonceBytes + TagBytes));
+            var result = new byte[1 + NonceBytes + TagBytes + ciphertext.Length];
+            result[0] = VersionMarker;
+            nonce.CopyTo(result, 1);
+            tag.CopyTo(result.AsSpan(1 + NonceBytes));
+            ciphertext.CopyTo(result.AsSpan(1 + NonceBytes + TagBytes));
 
-        return result;
+            return result;
+        }
     }
 
     public byte[] DecryptBytes(byte[] payload, string context)
@@ -77,14 +85,17 @@ internal sealed class AesGcmEncryptor : IEncryptor, IDisposable
             throw new CryptographicException("Payload is too short to contain a marker, nonce and tag.");
         }
 
-        var nonce = payload.AsSpan(1, NonceBytes);
-        var tag = payload.AsSpan(1 + NonceBytes, TagBytes);
-        var ciphertext = payload.AsSpan(1 + NonceBytes + TagBytes);
-        var plaintext = new byte[ciphertext.Length];
+        lock (_gate)
+        {
+            var nonce = payload.AsSpan(1, NonceBytes);
+            var tag = payload.AsSpan(1 + NonceBytes, TagBytes);
+            var ciphertext = payload.AsSpan(1 + NonceBytes + TagBytes);
+            var plaintext = new byte[ciphertext.Length];
 
-        _aes.Decrypt(nonce, ciphertext, tag, plaintext, AdditionalData(context));
+            _aes.Decrypt(nonce, ciphertext, tag, plaintext, AdditionalData(context));
 
-        return plaintext;
+            return plaintext;
+        }
     }
 
     private byte[] DecryptLegacy(byte[] payload)
@@ -94,14 +105,17 @@ internal sealed class AesGcmEncryptor : IEncryptor, IDisposable
             throw new CryptographicException("Payload is too short to contain a nonce and tag.");
         }
 
-        var nonce = payload.AsSpan(0, NonceBytes);
-        var tag = payload.AsSpan(NonceBytes, TagBytes);
-        var ciphertext = payload.AsSpan(NonceBytes + TagBytes);
-        var plaintext = new byte[ciphertext.Length];
+        lock (_gate)
+        {
+            var nonce = payload.AsSpan(0, NonceBytes);
+            var tag = payload.AsSpan(NonceBytes, TagBytes);
+            var ciphertext = payload.AsSpan(NonceBytes + TagBytes);
+            var plaintext = new byte[ciphertext.Length];
 
-        _aes.Decrypt(nonce, ciphertext, tag, plaintext);
+            _aes.Decrypt(nonce, ciphertext, tag, plaintext);
 
-        return plaintext;
+            return plaintext;
+        }
     }
 
     private static byte[] AdditionalData(string context) => Encoding.UTF8.GetBytes(context);
