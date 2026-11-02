@@ -22,6 +22,11 @@ public interface IAuthService
     /// caller is already authenticated and an unknown token leaves nothing to revoke.
     Task<Result> RevokeAsync(string refreshToken, CancellationToken cancellationToken = default);
 
+    /// Admin-only password reset: replaces the account's stored hash and revokes every refresh
+    /// credential it holds in one transaction. Answers 204 and never a session, so the admin
+    /// never receives login material for another account.
+    Task<Result> ResetPasswordAsync(int id, ResetPasswordRequest request, CancellationToken cancellationToken = default);
+
     Task<PagedResult<UserDto>> GetAllAsync(int? page = null, int? pageSize = null, CancellationToken cancellationToken = default);
 
     Task<Result<UserDto>> CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken = default);

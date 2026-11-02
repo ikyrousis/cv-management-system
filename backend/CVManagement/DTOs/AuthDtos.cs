@@ -73,6 +73,17 @@ public sealed class CreateUserRequest
     public string Role { get; set; } = string.Empty;
 }
 
+/// Admin reset contract. The caller's authorization is the proof, so there is no current-password
+/// field by design: the same trust that creates accounts and chooses their first passwords sets
+/// their replacements. Like every password contract, the value is never trimmed.
+public sealed class ResetPasswordRequest
+{
+    [Required(ErrorMessage = "New password is required")]
+    [StringLength(AuthLimits.PasswordMaxLength, MinimumLength = AuthLimits.PasswordMinLength,
+        ErrorMessage = "New password must be at least 12 characters")]
+    public string NewPassword { get; set; } = string.Empty;
+}
+
 /// The access half of a session: a short-lived bearer token and its expiry. The refresh half is
 /// issued alongside it and travels only in the combined TokenResponse.
 public sealed record AccessTokenResponse(string Token, DateTime ExpiresAtUtc);

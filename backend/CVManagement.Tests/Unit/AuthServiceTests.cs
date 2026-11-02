@@ -314,6 +314,41 @@ public sealed class AuthServiceTests
     }
 
     [Fact]
+    public async Task ResetPasswordAsync_UnknownUser_IsRefusedWithoutHashing()
+    {
+        _users.FindAsync(999, Arg.Any<CancellationToken>()).Returns((User?)null);
+
+        var result = await CreateSut().ResetPasswordAsync(999,
+            new ResetPasswordRequest { NewPassword = "fresh-password-1" });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FailureKind.NotFound, result.Failure.Kind);
+
+        // No work happens for an account that does not exist.
+        _hasher.DidNotReceive().HashPassword(Arg.Any<User>(), Arg.Any<string>());
+        await _users.DidNotReceive().ResetPasswordAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_KnownUser_HashesAndDelegatesOneAtomicCall()
+    {
+        var user = ActiveUser("old-hash");
+        _users.FindAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        _hasher.HashPassword(user, "fresh-password-1").Returns("new-hash");
+
+        var result = await CreateSut().ResetPasswordAsync(1,
+            new ResetPasswordRequest { NewPassword = "fresh-password-1" });
+
+        Assert.True(result.IsSuccess);
+
+        // The whole reset is one repository call: the hash replacement and the session revocation
+        // commit together, so the service must not compose them as separate write paths.
+        await _users.Received(1).ResetPasswordAsync(1, "new-hash", Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _refreshTokens.DidNotReceive().RevokeAllForUserAsync(Arg.Any<int>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task LoginAsync_HashNeedsRehash_RehashesBeforeIssuingToken()
     {
         var user = ActiveUser("old-format");

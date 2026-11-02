@@ -129,6 +129,24 @@ public sealed class AuthService : IAuthService
         return Result.Success();
     }
 
+    public async Task<Result> ResetPasswordAsync(int id, ResetPasswordRequest request, CancellationToken cancellationToken = default)
+    {
+        var user = await _users.FindAsync(id, cancellationToken);
+
+        if (user is null)
+        {
+            return Result.Fail(ServiceFailure.NotFound($"User {id} was not found."));
+        }
+
+        // No current-password check by design: the caller's admin authorization is the proof, the
+        // same trust that created the account and chose its first password.
+        var newPasswordHash = _hasher.HashPassword(user, request.NewPassword);
+
+        await _users.ResetPasswordAsync(user.Id, newPasswordHash, _clock.GetUtcNow().UtcDateTime, cancellationToken);
+
+        return Result.Success();
+    }
+
     public async Task<Result<TokenResponse>> BootstrapAsync(BootstrapRequest request, CancellationToken cancellationToken = default)
     {
         var user = new User

@@ -53,4 +53,25 @@ internal sealed class UserRepository : IUserRepository
 
         return true;
     }
+
+    /// One transaction for both effects: the tracked hash update (encrypted at SaveChanges by the
+    /// column's converter, the proven write path) and the revocation sweep commit together or not
+    /// at all, so a reset can never kill every session while leaving the old password usable,
+    /// or the reverse.
+    public async Task ResetPasswordAsync(int userId, string newPasswordHash, DateTime revokedAtUtc, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new InvalidOperationException($"User {userId} was not found for the password reset.");
+
+        user.PasswordHash = newPasswordHash;
+
+        await _context.RefreshTokens
+            .Where(r => r.UserId == userId && r.RevokedAtUtc == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.RevokedAtUtc, revokedAtUtc), cancellationToken);
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
 }

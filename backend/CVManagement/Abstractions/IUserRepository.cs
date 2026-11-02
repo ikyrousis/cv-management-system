@@ -22,4 +22,8 @@ public interface IUserRepository
     /// The bootstrap guard: adds the user only if no user exists, under a transaction that holds a
     /// lock over the count, so two simultaneous bootstraps cannot both succeed.
     Task<bool> AddWhenEmptyAsync(User user, CancellationToken cancellationToken = default);
+
+    /// Atomically replaces the account's stored hash and revokes every refresh credential it
+    /// holds: both effects commit together or neither does.
+    Task ResetPasswordAsync(int userId, string newPasswordHash, DateTime revokedAtUtc, CancellationToken cancellationToken = default);
 }

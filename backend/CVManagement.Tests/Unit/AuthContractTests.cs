@@ -67,6 +67,30 @@ public sealed class AuthContractTests
         Assert.Contains("Role", FieldsWithErrors(Validate(new CreateUserRequest { Username = "someone", Password = "valid-password-1" })));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    [InlineData("short")]
+    [InlineData("11-chars-ok")]
+    public void NewPassword_BelowTheMinimum_IsRejected(string? raw)
+    {
+        Assert.Contains("NewPassword", FieldsWithErrors(Validate(new ResetPasswordRequest { NewPassword = raw! })));
+    }
+
+    [Theory]
+    [InlineData("twelve-chars")]
+    [InlineData("a long passphrase with spaces")]
+    [InlineData("with trailing spaces kept intact ")]
+    public void NewPassword_AtOrAboveTheMinimum_IsAccepted(string raw)
+    {
+        // Spaces are legitimate password characters: the reset contract must accept them
+        // untrimmed, exactly like the login and creation contracts.
+        var request = new ResetPasswordRequest { NewPassword = raw };
+
+        AssertEmpty(Validate(request));
+        Assert.Equal(raw, request.NewPassword);
+    }
+
     private static IList<ValidationResult> Validate(object model)
     {
         var results = new List<ValidationResult>();

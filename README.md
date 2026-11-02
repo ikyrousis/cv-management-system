@@ -17,7 +17,7 @@ A simple CV management application built with ASP.NET Core 8.0 and React.
 ### Authentication
 - JWT bearer authentication on every endpoint except login, refresh, bootstrap and the health check
 - First-run bootstrap endpoint that creates the only administrator, then closes itself
-- Admin-only account management: create users, list users, deactivate users
+- Admin-only account management: create users, list users, deactivate users, reset passwords
 - Login answers unknown user, wrong password and deactivated account identically
 - Rotating refresh tokens: one silent refresh on app load, single-flight on 401, server-side logout
 - React frontend: login page, route guard, bearer-token interceptor with silent refresh and 401 auto-redirect
@@ -134,6 +134,13 @@ productized identity provider; the tradeoff and the design decisions are asserte
   logout carries no oracle. Deactivating a user revokes all their refresh tokens immediately;
   access tokens already issued stay valid until expiry, which is the stateless guarantee a test
   pins deliberately.
+- **Password changes**: admin resets only (`POST /api/users/{id}/password`). There is no
+  current-password field by design: the caller's authorization is the proof, the same trust that
+  created the account and chose its first password. The new hash (same policy, same PBKDF2
+  work factor, encrypted at rest through the existing column machinery) and a revocation of
+  every refresh token the account holds commit in one transaction, so a reset closes all live
+  sessions' refresh paths at once. The answer is a bare 204: the admin never receives login
+  material for another account.
 - **One role**: Admin gates user management only. Deactivating the last active administrator is
   refused, so the system can never lock itself out of account management.
 - **Key separation**: the encryption key and the token signing key must be different values, and
@@ -141,8 +148,13 @@ productized identity provider; the tradeoff and the design decisions are asserte
 - **Known limits, documented rather than hidden**: deactivating a user does not revoke an access
   token already issued to it until that token expires; tokens are stateless, and a test pins that
   exact behaviour so it can only change deliberately. The refresh path is closed immediately at
-  deactivation and at logout. There is no password-change flow; it belongs to a later change
-  together with shortening the access-token lifetime. The frontend keeps the access token in
+  deactivation, at logout and at password reset. A lost password for the sole administrator has
+  no in-band recovery by design, because nothing may reopen bootstrap remotely: the offline
+  procedure is to stop the API, clear the Users table (`DELETE FROM Users`; the cascade removes
+  the refresh credentials with it), run bootstrap again - it reopens only because the store is
+  empty - and recreate the remaining accounts from the API or the UI. Keeping a second admin
+  account is the operational safeguard that makes this procedure an emergency drill rather than
+  routine. The frontend keeps the access token in
   memory only and the refresh token in localStorage: the refresh token is XSS-readable, a
   tradeoff that buys sessions surviving a page refresh, bounded by rotation (a stolen token
   dies on first use), replay containment (replaying it kills the account's whole chain) and

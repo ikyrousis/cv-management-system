@@ -44,4 +44,10 @@ public sealed class UsersController : ControllerBase
     [HttpPost("{id:int}/deactivate")]
     public async Task<IActionResult> DeactivateUser(int id, CancellationToken cancellationToken)
         => this.AsNoContent(await _auth.DeactivateAsync(id, cancellationToken));
+
+    /// Password reset carries no session in its response: the admin's authorization is the
+    /// proof, and login material for another account must never change hands.
+    [HttpPost("{id:int}/password")]
+    public async Task<IActionResult> ResetPassword(int id, ResetPasswordRequest request, CancellationToken cancellationToken)
+        => this.AsNoContent(await _auth.ResetPasswordAsync(id, request, cancellationToken));
 }
