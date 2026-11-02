@@ -176,15 +176,26 @@ public sealed class PasswordResetTests
 
         Assert.All(responses, r => Assert.Equal(HttpStatusCode.NoContent, r.StatusCode));
 
+        // Probed one at a time: what this asserts is which hash survived the race, so a burst of
+        // parallel logins would add a second, unrelated way for the probe itself to fail and would
+        // report only a count when it did.
         var client = _fixture.Factory.CreateClient();
-        var logins = await Task.WhenAll(passwords.Select(p =>
-            client.PostAsJsonAsync("/api/auth/login", new { username, password = p })));
+        var outcomes = new List<(string Password, HttpStatusCode Status)>();
 
-        var working = logins.Count(r => r.StatusCode == HttpStatusCode.OK);
+        foreach (var candidate in passwords)
+        {
+            var login = await client.PostAsJsonAsync("/api/auth/login", new { username, password = candidate });
+            outcomes.Add((candidate, login.StatusCode));
+        }
 
-        Assert.Equal(1, working);
-        Assert.All(logins.Where(r => r.StatusCode != HttpStatusCode.OK),
-            r => Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode));
+        var working = outcomes.Where(o => o.Status == HttpStatusCode.OK).ToList();
+
+        Assert.True(working.Count == 1,
+            "Exactly one of the submitted passwords must remain valid. Observed: "
+            + string.Join(", ", outcomes.Select(o => $"{o.Password}:{(int)o.Status}")));
+
+        Assert.All(outcomes.Where(o => o.Status != HttpStatusCode.OK),
+            o => Assert.Equal(HttpStatusCode.Unauthorized, o.Status));
     }
 
     private async Task<string?> ReadStoredHashAsync(string username)
