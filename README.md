@@ -123,7 +123,9 @@ productized identity provider; the tradeoff and the design decisions are asserte
   consumes the presented credential and issues a full new window (default 7 days), so an active
   session never re-logins; the cap is how long an abandoned device keeps access. Consumption is
   a single conditional UPDATE committed in one transaction with the successor's insert, so
-  concurrent presentations of one credential produce exactly one session, deterministically.
+  concurrent presentations of one credential produce exactly one session, deterministically, and a
+  fault mid-rotation rolls the consume back with the insert instead of stranding the account with
+  a consumed token and no successor.
 - **Replay containment**: presenting an already-used credential is theft-shaped, so it revokes
   every refresh token the account holds; the legitimate holder and the thief are logged out
   together. Expiry is deliberately exempt: an expired credential is abandonment, not theft, and
@@ -131,7 +133,11 @@ productized identity provider; the tradeoff and the design decisions are asserte
   response reveals nothing about which state the credential was in.
 - **Revocation surfaces**: `POST /api/auth/logout` (requires a live access token) burns the
   presented refresh credential, answering 204 for unknown or already-used tokens as well, so
-  logout carries no oracle. Deactivating a user revokes all their refresh tokens immediately;
+  logout carries no oracle. The account is taken from the authenticated principal and is part of
+  the revocation predicate, so a caller can end only their own session and only that one session:
+  presenting somebody else's credential revokes nothing and reveals neither its existence nor its
+  owner, and the account's other devices survive a logout. Deactivating a user revokes all their
+  refresh tokens immediately;
   access tokens already issued stay valid until expiry, which is the stateless guarantee a test
   pins deliberately.
 - **Password changes**: admin resets only (`POST /api/users/{id}/password`). There is no

@@ -278,19 +278,19 @@ public sealed class AuthServiceTests
     {
         _refreshGenerator.Hash("raw-token").Returns("stored-hash");
 
-        var result = await CreateSut().RevokeAsync("raw-token");
+        var result = await CreateSut().RevokeAsync(1, "raw-token");
 
         Assert.True(result.IsSuccess);
-        await _refreshTokens.Received(1).TryRevokeByHashAsync("stored-hash", Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        await _refreshTokens.Received(1).TryRevokeByHashForUserAsync("stored-hash", 1, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task RevokeAsync_UnknownToken_SucceedsWithoutContainment()
     {
         _refreshGenerator.Hash("bogus-token").Returns("unknown-hash");
-        _refreshTokens.TryRevokeByHashAsync("unknown-hash", Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(false);
+        _refreshTokens.TryRevokeByHashForUserAsync("unknown-hash", 1, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await CreateSut().RevokeAsync("bogus-token");
+        var result = await CreateSut().RevokeAsync(1, "bogus-token");
 
         // Logout must not answer with an oracle, and a stray token is not theft evidence.
         Assert.True(result.IsSuccess);
