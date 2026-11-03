@@ -18,9 +18,10 @@ public interface IAuthService
     /// whole chain, because only an attacker can be holding a used token.
     Task<Result<TokenResponse>> RefreshAsync(RefreshRequest request, CancellationToken cancellationToken = default);
 
-    /// Logout: revokes the presented refresh credential. Idempotent and oracle-free, because the
-    /// caller is already authenticated and an unknown token leaves nothing to revoke.
-    Task<Result> RevokeAsync(string refreshToken, CancellationToken cancellationToken = default);
+    /// Logout: revokes the refresh credential the caller presents, and only if it belongs to the
+    /// caller. Idempotent and oracle-free, because the caller is already authenticated and a token
+    /// that is unknown or somebody else's leaves nothing for them to revoke.
+    Task<Result> RevokeAsync(int userId, string refreshToken, CancellationToken cancellationToken = default);
 
     /// Admin-only password reset: replaces the account's stored hash and revokes every refresh
     /// credential it holds in one transaction. Answers 204 and never a session, so the admin

@@ -41,10 +41,12 @@ internal sealed class RefreshTokenRepository : IRefreshTokenRepository
     }
 
     /// ExecuteUpdate is a single conditional UPDATE statement, so the revoked-state check and the
-    /// write cannot interleave: two concurrent logout calls cannot both consume one token.
-    public async Task<bool> TryRevokeByHashAsync(string tokenHash, DateTime revokedAtUtc, CancellationToken cancellationToken = default)
+    /// write cannot interleave: two concurrent logout calls cannot both consume one token. The
+    /// owning account is part of the predicate, so presenting somebody else's credential matches
+    /// zero rows instead of ending their session.
+    public async Task<bool> TryRevokeByHashForUserAsync(string tokenHash, int userId, DateTime revokedAtUtc, CancellationToken cancellationToken = default)
         => await _context.RefreshTokens
-            .Where(r => r.TokenHash == tokenHash && r.RevokedAtUtc == null)
+            .Where(r => r.TokenHash == tokenHash && r.UserId == userId && r.RevokedAtUtc == null)
             .ExecuteUpdateAsync(s => s.SetProperty(r => r.RevokedAtUtc, revokedAtUtc), cancellationToken) == 1;
 
     public async Task RevokeAllForUserAsync(int userId, DateTime revokedAtUtc, CancellationToken cancellationToken = default)

@@ -14,9 +14,10 @@ public interface IRefreshTokenRepository
     /// containment that follows it.
     Task<bool> TryReplaceAsync(string presentedTokenHash, DateTime revokedAtUtc, RefreshToken replacement, CancellationToken cancellationToken = default);
 
-    /// Atomic single-token revocation, used by logout: one conditional UPDATE, so the outcome
-    /// reports whether this call was the one that revoked it.
-    Task<bool> TryRevokeByHashAsync(string tokenHash, DateTime revokedAtUtc, CancellationToken cancellationToken = default);
+    /// Atomic single-token revocation, used by logout: one conditional UPDATE over the digest and
+    /// the owning account, so the outcome reports whether this call was the one that revoked it
+    /// and a credential belonging to somebody else simply matches no row.
+    Task<bool> TryRevokeByHashForUserAsync(string tokenHash, int userId, DateTime revokedAtUtc, CancellationToken cancellationToken = default);
 
     /// Containment: kills every token the account holds, used when a revoked token is replayed.
     Task RevokeAllForUserAsync(int userId, DateTime revokedAtUtc, CancellationToken cancellationToken = default);

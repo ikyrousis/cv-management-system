@@ -119,12 +119,13 @@ public sealed class AuthService : IAuthService
             access.Token, access.ExpiresAtUtc, material.Token, material.ExpiresAtUtc));
     }
 
-    public async Task<Result> RevokeAsync(string refreshToken, CancellationToken cancellationToken = default)
+    public async Task<Result> RevokeAsync(int userId, string refreshToken, CancellationToken cancellationToken = default)
     {
-        // Oracle-free by design: an unknown or already-used token answers success, because the
-        // caller is authenticated and must not learn which credentials exist.
+        // Oracle-free by design: an unknown, already-used or somebody else's token answers success,
+        // because the caller is authenticated and must not learn which credentials exist. The
+        // account is part of the revocation predicate, so logout can only end the caller's session.
         var hash = _refreshGenerator.Hash(refreshToken);
-        await _refreshTokens.TryRevokeByHashAsync(hash, _clock.GetUtcNow().UtcDateTime, cancellationToken);
+        await _refreshTokens.TryRevokeByHashForUserAsync(hash, userId, _clock.GetUtcNow().UtcDateTime, cancellationToken);
 
         return Result.Success();
     }

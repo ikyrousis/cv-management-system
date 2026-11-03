@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using CVManagement.Extensions;
 using CVManagement.DTOs;
 using CVManagement.Services;
@@ -30,12 +31,21 @@ public sealed class AuthController : ControllerBase
         => this.AsResult(await _auth.RefreshAsync(request, cancellationToken));
 
     /// Requires a live access token: logout is the holder ending their own session, so it must not
-    /// burn the anonymous throttle budget that guards the guessing surface.
+    /// burn the anonymous throttle budget that guards the guessing surface. The account is taken
+    /// from the authenticated principal, never from the request body, so a caller can only revoke
+    /// a credential that is already theirs.
     [HttpPost("logout")]
     [Authorize]
     [DisableRateLimiting]
     public async Task<IActionResult> Logout(RefreshRequest request, CancellationToken cancellationToken)
-        => this.AsNoContent(await _auth.RevokeAsync(request.RefreshToken, cancellationToken));
+    {
+        if (!TryGetCallerId(out var callerId))
+        {
+            return Unauthorized();
+        }
+
+        return this.AsNoContent(await _auth.RevokeAsync(callerId, request.RefreshToken, cancellationToken));
+    }
 
     /// Exists only while the Users table is empty; the service closes it after the first account.
     [HttpPost("bootstrap")]
@@ -47,4 +57,10 @@ public sealed class AuthController : ControllerBase
             ? StatusCode(StatusCodes.Status201Created, result.Value)
             : this.AsError(result.Failure);
     }
+
+    /// The account the access token was issued to. The bearer middleware maps the short-form sub
+    /// claim onto NameIdentifier, the same inbound mapping the role-based authorization depends on,
+    /// so a principal without it names no account and no session can be scoped to it.
+    private bool TryGetCallerId(out int callerId)
+        => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out callerId);
 }
