@@ -1,6 +1,6 @@
 # CV Management System
 
-A simple CV management application built with ASP.NET Core 8.0 and React.
+A CV management application built with ASP.NET Core 8.0 and React. It covers candidate and degree management with CV upload, and hardens the data with application-level AES-256-GCM encryption, JWT bearer authentication with rotating refresh tokens and rate limiting, all covered by unit and integration tests and by security gates in CI.
 
 ## Features
 
